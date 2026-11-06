@@ -13,6 +13,8 @@ if sys.stderr is None:
 from flask import Flask, g, jsonify, request, send_from_directory, abort
 from waitress.server import create_server
 
+import pulses as PUL          # 二十八脉静态知识库
+
 FROZEN = getattr(sys, 'frozen', False)
 BASE = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE, 'data')
@@ -63,8 +65,11 @@ def api_bootstrap():
                    (SELECT COUNT(*) FROM passages) p, (SELECT COUNT(*) FROM herbs) h,
                    (SELECT SUM(char_count) FROM clauses) chars""")
     cats = list(dict.fromkeys(c['category'] for c in chapters))
+    pulse_list = [{'no': p['no'], 'name': p['name'], 'py': p['py'],
+                   'group': p['group'], 'ill': p['ill'], 'anim': p['anim']} for p in PUL.PULSES]
     return jsonify(chapters=chapters, lectures=lectures, formulas=formulas, herbs=herbs,
                    sources=sources, stats=stats, categories=cats,
+                   pulses=pulse_list, pulseGroups=PUL.GROUPS, pulseParts=PUL.PARTS,
                    book={'title': '伤寒杂病论', 'edition': '桂林古本 · 白云阁藏本系统',
                          'author': '汉 · 张仲景', 'lecturer': '郝万山'})
 
@@ -130,6 +135,16 @@ def api_herb(hid):
             uniq.append(f)
     return jsonify(herb=h, formulas=uniq, chapters=chs)
 
+@app.get('/api/pulse/<int:no>')
+def api_pulse(no):
+    idx = next((i for i, p in enumerate(PUL.PULSES) if p['no'] == no), None)
+    if idx is None:
+        abort(404)
+    brief = lambda p: {'no': p['no'], 'name': p['name'], 'py': p['py']}
+    return jsonify(pulse=PUL.PULSES[idx], parts=PUL.PARTS,
+                   prev=brief(PUL.PULSES[idx - 1]) if idx else None,
+                   next=brief(PUL.PULSES[idx + 1]) if idx + 1 < len(PUL.PULSES) else None)
+
 CL = 'c.id,c.chapter_no,c.no,c.origin,c.translation,ch.title ctitle'
 PS = 'p.id,p.lecture_no,p.seq,p.title,p.text,l.title ltitle'
 
@@ -137,7 +152,7 @@ PS = 'p.id,p.lecture_no,p.seq,p.title,p.text,l.title ltitle'
 def api_search():
     q = (request.args.get('q') or '').strip()
     if not q:
-        return jsonify(q=q, clauses=[], passages=[], formulas=[], herbs=[])
+        return jsonify(q=q, clauses=[], passages=[], formulas=[], herbs=[], pulses=[])
 
     like, cl, ps = '%' + q + '%', [], []
 
@@ -164,7 +179,10 @@ def api_search():
     hs = rows('''SELECT id,name,category,nature,effect,formula_count FROM herbs
                  WHERE name LIKE ? OR effect LIKE ? OR indication LIKE ? OR modern LIKE ?
                  ORDER BY formula_count DESC LIMIT 20''', (like, like, like, like))
-    return jsonify(q=q, clauses=cl, passages=ps, formulas=fs, herbs=hs)
+    pu = [{'no': p['no'], 'name': p['name'], 'py': p['py'], 'group': p['group'], 'ill': p['ill']}
+          for p in PUL.PULSES
+          if q in p['name'] or q in p['shape'] or any(q in i for i in p['ill'])][:12]
+    return jsonify(q=q, clauses=cl, passages=ps, formulas=fs, herbs=hs, pulses=pu)
 
 @app.get('/api/ping')
 def api_ping():

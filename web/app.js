@@ -30,6 +30,7 @@ const S = {
   route: { view: 'home', id: 0 },
   marks: store.get('marks', []),
   settings: store.get('settings', { mode: 'all', fs: 1, theme: 'paper' }),
+  pulseMap: new Map(),
 };
 
 /* ---------------- 通用片段 ---------------- */
@@ -74,11 +75,16 @@ const accItem = (no, title, body, { preview = '', open = false, src = '' } = {})
     <div class="acc-body">${body}${src ? `<span class="src">${src}</span>` : ''}</div>
   </div>`;
 
-const pager = (prev, next, kind = '篇') => `
+const PAGER_ROUTE = { 篇: 'c', 讲: 'l', 脉: 'p' };
+const pager = (prev, next, kind = '篇') => {
+  const r = PAGER_ROUTE[kind] || 'c';
+  const label = o => esc(o.name || o.title || '');
+  return `
   <nav class="pager">
-    ${prev ? `<a href="#/${kind === '篇' ? 'c' : 'l'}/${prev.no}"><small>上一${kind}</small>${esc(prev.title)}</a>` : '<span></span>'}
-    ${next ? `<a class="r" href="#/${kind === '篇' ? 'c' : 'l'}/${next.no}"><small>下一${kind}</small>${esc(next.title)}</a>` : '<span></span>'}
+    ${prev ? `<a href="#/${r}/${prev.no}"><small>上一${kind}</small>${label(prev)}</a>` : '<span></span>'}
+    ${next ? `<a class="r" href="#/${r}/${next.no}"><small>下一${kind}</small>${label(next)}</a>` : '<span></span>'}
   </nav>`;
+};
 
 let toastTimer;
 function toast(msg) {
@@ -89,10 +95,104 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('on'), 1600);
 }
 
+/* ---------------- 脉象动画 ---------------- */
+const PULSE_DEF = { pos: .45, rate: 72, amp: 1, w: 1, ten: .5, slip: .5, span: 1, rhythm: 'reg', shape: 'normal' };
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+let COL = { zhu: '#9c2b24', line: '#e3d8bf' };
+
+function readColors() {
+  const s = getComputedStyle(document.documentElement);
+  COL = {
+    zhu: s.getPropertyValue('--zhu').trim() || COL.zhu,
+    line: s.getPropertyValue('--line').trim() || COL.line,
+  };
+}
+
+const rnd = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+/* 节律门：1 为正常搏动，0 为歇止 */
+const GATE = {
+  cu: i => (i % 4 === 3 ? 0 : 1),      // 促：数而时止，止无定数
+  jie: i => (i % 3 === 2 ? 0 : 1),     // 结：缓而时止，止无定数
+  dai: i => (i % 5 >= 3 ? 0 : 1),      // 代：止有定数，良久方来
+};
+
+/** 单次搏动的振幅，ph 为相位 0→1 */
+function beat(ph, p, i) {
+  const wl = .05 + .07 * (1 - p.ten);                  // 张力大 → 波峰窄
+  const wr = wl * (p.shape === 'flood' ? 3 : 1.35);    // 洪脉来盛去衰
+  const g = (c, k = 1) => {
+    const d = ph - c, w = (d < 0 ? wl : wr) * k;
+    return Math.exp(-((d / w) ** 2));
+  };
+  let a = g(.30) + (.15 + .45 * p.slip) * g(.58, 1.15);              // 主波 + 重搏波
+  if (p.shape === 'kou') a = g(.24, 1.2) + .8 * g(.56, 1.3) - .95 * g(.40, .6);  // 中空如按葱管
+  if (p.shape === 'taut') a = Math.min(1, a * 1.5);                  // 端直而平顶
+  if (p.shape === 'cuo') a *= .8 + .35 * Math.sin(ph * 46);          // 涩：往来蹇滞
+  if (p.shape === 'san') a = (.35 + .65 * rnd(i * 7 + Math.floor(ph * 3))) * g(.45);  // 散：涣散无根
+  return Math.max(0, a);
+}
+
+function drawTrace(cv, p, t) {
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  if (cv.width !== Math.round(W * DPR)) {
+    cv.width = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+  }
+  const c = cv.getContext('2d');
+  c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  c.clearRect(0, 0, W, H);
+
+  const base = H * .74, ampPx = H * .52 * p.amp;
+  c.strokeStyle = COL.line; c.lineWidth = 1; c.setLineDash([3, 5]);
+  c.beginPath(); c.moveTo(0, base + .5); c.lineTo(W, base + .5); c.stroke();
+  c.setLineDash([]);
+
+  const cycles = (p.rate / 60) * 2.4;   // 屏内 2.4 秒的搏动次数
+  const gate = GATE[p.rhythm];
+  const step = H < 80 ? 2 : 1;
+
+  c.beginPath();
+  for (let x = 0; x <= W; x += step) {
+    const tt = (x / W) * cycles + t * (p.rate / 60);
+    const i = Math.floor(tt);
+    const ph = (tt - i - .4) / p.span + .4;
+    let a = beat(ph, p, i) * (gate ? gate(i) : 1);
+    if (p.shape === 'dong' && (x < W * .34 || x > W * .66)) a = 0;   // 独见于关
+    const y = base - a * ampPx;
+    x ? c.lineTo(x, y) : c.moveTo(x, y);
+  }
+  c.strokeStyle = COL.zhu;
+  c.lineWidth = Math.max(1, 1.5 * p.w);
+  c.lineJoin = c.lineCap = 'round';
+  c.stroke();
+}
+
+let animId = 0, animT0 = 0, animLast = 0;
+function startPulseAnim() {
+  cancelAnimationFrame(animId);
+  const nodes = $$('canvas[data-pno]');
+  if (!nodes.length) return;
+  const items = nodes.map(cv => ({
+    cv, p: { ...PULSE_DEF, ...(S.pulseMap.get(+cv.dataset.pno) || {}).anim },
+  }));
+  animT0 = animLast = performance.now();
+  const step = now => {
+    animId = requestAnimationFrame(step);
+    if (now - animLast < 32) return;          // 约 30fps，28 个缩略图也不卡
+    animLast = now;
+    const t = (now - animT0) / 1000;
+    for (const it of items) drawTrace(it.cv, it.p, t);
+  };
+  animId = requestAnimationFrame(step);
+}
+
 /* ---------------- 启动与设置 ---------------- */
 async function boot() {
   applySettings();
   S.boot = await api('/api/bootstrap');
+  S.pulseMap = new Map(S.boot.pulses.map(p => [p.no, p]));
   const { stats } = S.boot;
   $('#footStats').textContent = `${stats.c} 条 · ${stats.f} 方 · ${stats.p} 段`;
   renderSidebar();
@@ -108,6 +208,7 @@ function applySettings() {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.setProperty('--fs', (0.94 + fs * 0.06).toFixed(3) + 'rem');
   $$('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  readColors();
 }
 
 function saveSettings(patch) {
@@ -139,6 +240,7 @@ function renderSidebar() {
 
   renderFormulaList('');
   renderHerbList('');
+  renderPulseList();
   renderMarks();
 
   $('#formulaFilter').addEventListener('input', e => renderFormulaList(e.target.value.trim()));
@@ -166,6 +268,18 @@ function renderHerbList(q) {
       </a>`).join('')).join('') : '<div class="empty">没有匹配的药材</div>';
 }
 
+function renderPulseList() {
+  const { pulses, pulseGroups } = S.boot;
+  $('#pane-pulses').innerHTML = pulseGroups.map(g => {
+    const list = pulses.filter(p => p.group === g);
+    return `<div class="cat-head"><i></i>${g} · ${list.length}</div>` + list.map(p => `
+      <a class="ch-item pulse-item" href="#/p/${p.no}" data-key="p${p.no}">
+        <span class="ch-title">${esc(p.name)}<span class="py">${p.py}</span></span>
+        <span class="ch-meta">${esc(p.ill[0])}</span>
+      </a>`).join('');
+  }).join('');
+}
+
 function renderMarks() {
   $('#pane-marks').innerHTML = S.marks.length ? S.marks.map(m => `
     <a class="ch-item" href="#/c/${m.chapter_no}?c=${m.no}">
@@ -175,7 +289,7 @@ function renderMarks() {
     </a>`).join('') : '<div class="empty">还没有收藏<br>阅读时点击条文右上角的 ☆</div>';
 }
 
-const PANE_OF = { chapter: 'chapters', lecture: 'lectures', formula: 'formulas', herb: 'herbs', home: 'chapters' };
+const PANE_OF = { chapter: 'chapters', lecture: 'lectures', formula: 'formulas', herb: 'herbs', pulse: 'pulses', home: 'chapters' };
 
 function activatePane(name) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.pane === name));
@@ -188,8 +302,8 @@ function markActive(key) {
 }
 
 /* ---------------- 路由 ---------------- */
-const VIEWS = { c: 'chapter', l: 'lecture', f: 'formula', h: 'herb' };
-const RENDER = { chapter: viewChapter, lecture: viewLecture, formula: viewFormula, herb: viewHerb };
+const VIEWS = { c: 'chapter', l: 'lecture', f: 'formula', h: 'herb', p: 'pulse' };
+const RENDER = { chapter: viewChapter, lecture: viewLecture, formula: viewFormula, herb: viewHerb, pulse: viewPulse };
 
 function route() {
   const [path, qs] = (location.hash.slice(1) || '/').split('?');
@@ -208,7 +322,7 @@ function route() {
   $('#main').scrollTop = 0;
 
   const render = RENDER[S.route.view];
-  render ? render(+id, q) : renderWelcome();
+  Promise.resolve(render ? render(+id, q) : renderWelcome()).then(startPulseAnim);
 }
 
 const go = hash => { location.hash = hash; };
@@ -227,6 +341,7 @@ function renderWelcome() {
         <div class="stat"><b>${stats.c}</b><span>条文</span></div>
         <div class="stat"><b>${stats.f}</b><span>方剂</span></div>
         <div class="stat"><b>${stats.h}</b><span>中药</span></div>
+        <div class="stat"><b>${S.boot.pulses.length}</b><span>脉象</span></div>
         <div class="stat"><b>70</b><span>讲次</span></div>
       </div>
       <p class="welcome-hint">原文 ${(stats.chars / 10000).toFixed(1)} 万字　·　按 <kbd>/</kbd> 全书检索　·　<kbd>←</kbd> <kbd>→</kbd> 翻篇</p>
@@ -403,8 +518,100 @@ async function viewHerb(id) {
     ${formulas}${chapters}`;
 }
 
+/* ---------------- 脉学 ---------------- */
+const SIX = [
+  ['脉位浅深', '浮', '沉', '浮主表，沉主里'],
+  ['至数快慢', '迟', '数', '迟主寒，数主热'],
+  ['脉力强弱', '虚', '实', '虚主不足，实主有余'],
+];
+
+function renderPulseOverview() {
+  const { pulses, pulseGroups } = S.boot;
+  $('#crumb').innerHTML = '<b>脉学</b> · 二十八脉';
+  document.title = '二十八脉 · 伤寒杂病论';
+  markActive('');
+
+  const groups = pulseGroups.map(g => {
+    const list = pulses.filter(p => p.group === g);
+    return `<div class="pgroup">
+      <div class="pg-head"><i></i>${g} · ${list.length}</div>
+      <div class="pulse-grid">${list.map(p => `
+        <a class="pcard" href="#/p/${p.no}">
+          <div class="pcard-top">
+            <span class="pc-name">${esc(p.name)}</span>
+            <span class="pc-py">${p.py}</span>
+            <span class="pc-no">${String(p.no).padStart(2, '0')}</span>
+          </div>
+          <canvas data-pno="${p.no}"></canvas>
+          <div class="pc-ill">${esc(p.ill.join(' · '))}</div>
+        </a>`).join('')}</div>
+    </div>`;
+  }).join('');
+
+  $('#reader').innerHTML = `
+    ${hero('脉学 · 二十八脉', '二十八脉', mi('脉象', 28) + mi('分部', '左右手各三部'))}
+    <p class="pulse-lead">脉诊独取寸口：掌后高骨内侧为关，关前为寸，关后为尺。左手候心、肝、肾，右手候肺、脾、命门。
+      二十八脉自《濒湖脉学》定型，以浮、沉、迟、数、虚、实为六纲，余脉皆由此派生。下列每脉皆列指下体状、形成原理、
+      主病与六部分布，并以动态波形示意其搏动之象。</p>
+    <div class="six-row">${SIX.map(([k, a, b, h]) => `
+      <div class="six-card">
+        <div class="sk">${k}</div>
+        <div class="sv"><b>${a}</b> ⇄ <b>${b}</b></div>
+        <div class="sh">${h}</div>
+      </div>`).join('')}</div>
+    ${groups}`;
+}
+
+async function viewPulse(no) {
+  if (!no) return renderPulseOverview();
+
+  const d = await api('/api/pulse/' + no);
+  const p = d.pulse, a = { ...PULSE_DEF, ...p.anim };
+  $('#crumb').innerHTML = `<b>二十八脉</b> · ${esc(p.group)} · ${esc(p.name)}脉`;
+  document.title = `${p.name}脉 ${p.py} · 伤寒杂病论`;
+  markActive('p' + no);
+
+  const depth = a.pos < .3 ? '浮 · 轻取即得' : a.pos > .75 ? '沉 · 重按始得' : '中 · 不浮不沉';
+  const facts = [
+    `一息约 <b>${(a.rate / 18).toFixed(1)}</b> 至`,
+    `<b>${a.rate}</b> 次/分`,
+    `脉位 <b>${depth}</b>`,
+    `力度 <b>${a.amp >= 1.1 ? '实' : a.amp <= .5 ? '虚' : '中'}</b>`,
+    `脉体 <b>${a.span > 1.1 ? '长' : a.span < .8 ? '短' : '中'}</b>`,
+    `张力 <b>${a.ten >= .8 ? '强' : a.ten <= .25 ? '弱' : '中'}</b>`,
+  ];
+
+  const parts = [0, 3].map(s => `
+    <div class="pg-side">${d.parts[s].side}</div>
+    ${d.parts.slice(s, s + 3).map((pt, i) => `
+      <div class="part">
+        <div class="pt-head"><b>${pt.side}${pt.pos}</b><span>${pt.organ} · ${pt.sub}</span></div>
+        <p>${esc(p.parts[s + i])}</p>
+      </div>`).join('')}`).join('');
+
+  $('#reader').innerHTML = `
+    ${hero(`二十八脉 · ${p.group}`, `${esc(p.name)}脉<span class="hero-alias">${p.py}</span>`,
+      mi('序', `${p.no} / 28`) + mi('归类', p.group) + mi('主病', esc(p.ill[0])))}
+    <div class="pulse-stage">
+      <div class="pa-gauge" style="--pos:${a.pos}">
+        <div class="pg-track"><i></i></div>
+        <div class="pg-labels"><span>皮</span><span>肉</span><span>筋</span><span>骨</span></div>
+      </div>
+      <div class="pa-wave">
+        <canvas data-pno="${p.no}"></canvas>
+        <div class="pa-facts">${facts.map(f => `<span class="pa-fact">${f}</span>`).join('')}</div>
+      </div>
+    </div>
+    ${section('脉象体状', '指下所得', `<p class="pulse-text">${esc(p.shape)}</p>`)}
+    ${section('形成原理', '何以有此象', `<p class="pulse-text">${esc(p.why)}</p>`)}
+    ${section('主　病', `${p.ill.length} 类`, `<div class="pulse-ill">${p.ill.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`)}
+    ${section('相关反应', '临床可见', `<p class="pulse-text">${esc(p.signs)}</p>`)}
+    ${section('左右手六部', '寸关尺各有所主', `<div class="parts-grid">${parts}</div>`)}
+    ${pager(d.prev, d.next, '脉')}`;
+}
+
 /* ---------------- 搜索 ---------------- */
-const SEARCH_TIP = '<p class="search-empty">试试：桂枝汤 · 胃家实 · 柴胡 · 但欲寐</p>';
+const SEARCH_TIP = '<p class="search-empty">试试：桂枝汤 · 胃家实 · 柴胡 · 弦脉 · 但欲寐</p>';
 let searchTimer, searchItems = [], searchSel = -1;
 
 function openSearch() {
@@ -445,6 +652,9 @@ async function doSearch(q) {
     ['中药', d.herbs, h => item(`#/h/${h.id}`,
       `${esc(h.category)} · 见于 ${h.formula_count} 方`,
       `${hl(h.name)}<span class="s-sub">${esc(h.nature || '')}　${esc((h.effect || '').slice(0, 24))}</span>`)],
+    ['脉象', d.pulses, p => item(`#/p/${p.no}`,
+      `${esc(p.group)} · ${p.py}`,
+      `${hl(p.name)}脉<span class="s-sub">${esc((p.ill || []).join(' · '))}</span>`)],
     ['郝万山讲稿', d.passages, p => item(`#/l/${p.lecture_no}`,
       `第 ${p.lecture_no} 讲 · ${esc(p.ltitle)}`,
       snip(p.text))],
@@ -471,7 +681,8 @@ function showSources() {
         <div class="t s-note">${esc(s.note)}</div>
       </button></div>`).join('');
   $('#searchBody').innerHTML = `<div class="s-group"><h4>资料来源</h4>
-    <p class="s-intro">原文取自易推智道经典书库桂林古本；郝万山讲解取自其《伤寒论》七十讲讲稿。</p></div>${items}`;
+    <p class="s-intro">原文取自易推智道经典书库桂林古本；郝万山讲解取自其《伤寒论》七十讲讲稿；
+      二十八脉的体状、主病依李时珍《濒湖脉学》，左右手分部所主参《中医诊断学》通行表述。</p></div>${items}`;
   $('#overlay').hidden = false;
   $('#searchInput').value = '';
   $$('#searchBody .s-item').forEach(b => { b.onclick = () => window.open(b.dataset.go, '_blank'); });

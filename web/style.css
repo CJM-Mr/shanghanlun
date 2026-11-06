@@ -122,14 +122,14 @@ kbd {
 }
 
 .tabs {
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   gap: 2px; margin: 0 16px 8px; padding: 3px;
   background: var(--paper-3); border-radius: 9px;
 }
 .tab {
   border: 0; background: transparent; cursor: pointer;
-  font-family: var(--sans); font-size: 11.5px; color: var(--ink-3);
-  padding: 7px 0; border-radius: 7px; transition: .16s;
+  font-family: var(--sans); font-size: 11px; color: var(--ink-3);
+  padding: 7px 0; border-radius: 7px; transition: .16s; white-space: nowrap;
 }
 .tab:hover { color: var(--ink); }
 .tab.active {
@@ -477,7 +477,7 @@ body[data-mode="both"] .note { display: none; }
   margin: 12px 0 40px; font-family: var(--sans); font-size: 12px;
   letter-spacing: .12em; color: var(--ink-3);
 }
-.welcome-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 40px; }
+.welcome-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 40px; }
 .stat {
   padding: 18px 10px; border: 1px solid var(--line); border-radius: 11px;
   background: var(--paper-2);
@@ -609,3 +609,122 @@ body[data-mode="both"] .note { display: none; }
   font-family: var(--sans); font-size: 10.5px; line-height: 1.9; color: var(--ink-2);
 }
 .herb-item .ch-title { font-size: 13.2px; }
+
+/* ---------- 脉学模块 ---------- */
+.pulse-item .ch-title { font-size: 13.6px; }
+.pulse-item .py {
+  font-family: var(--sans); font-size: 9.5px; color: var(--ink-3);
+  margin-left: 5px; letter-spacing: .02em;
+}
+.pulse-item .ch-meta { font-size: 9.5px; }
+
+/* 总览：六纲 */
+.pulse-lead {
+  margin: 12px 0 0; font-size: .96rem; line-height: 2.02;
+  color: var(--ink-2); text-align: justify;
+}
+.six-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.six-card {
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--paper-2);
+}
+.six-card .sk {
+  font-family: var(--sans); font-size: 9.5px; letter-spacing: .14em; color: var(--ink-3);
+}
+.six-card .sv { margin: 5px 0 3px; font-size: 1.05rem; letter-spacing: .08em; }
+.six-card .sv b { color: var(--zhu); font-weight: 600; }
+.six-card .sh { font-family: var(--sans); font-size: 10px; color: var(--ink-3); }
+
+/* 总览：脉象卡片 */
+.pgroup { margin-top: 34px; }
+.pg-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  font-family: var(--sans); font-size: 10.5px; letter-spacing: .18em; color: var(--ink-3);
+}
+.pg-head::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+.pg-head i { width: 5px; height: 5px; border-radius: 50%; background: var(--zhu-soft); }
+
+.pulse-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 11px; }
+.pcard {
+  display: block; text-decoration: none; color: inherit;
+  padding: 11px 13px 9px; border: 1px solid var(--line); border-radius: 11px;
+  background: var(--paper-2); transition: border-color .16s, transform .16s, box-shadow .16s;
+}
+.pcard:hover { border-color: var(--zhu-soft); transform: translateY(-1px); box-shadow: var(--shadow); }
+.pcard-top { display: flex; align-items: baseline; gap: 6px; }
+.pc-name { font-size: 1.2rem; font-weight: 600; letter-spacing: .08em; color: var(--ink); }
+.pc-py { font-family: var(--sans); font-size: 10px; color: var(--ink-3); }
+.pc-no {
+  margin-left: auto; font-family: var(--sans); font-size: 9.5px;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.pcard canvas { display: block; width: 100%; height: 50px; margin: 4px 0 5px; }
+.pc-ill {
+  font-family: var(--sans); font-size: 10px; line-height: 1.6; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 详情：动画舞台 */
+.pulse-stage {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px;
+  margin-top: 24px; padding: 16px 18px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--paper-2);
+}
+.pa-gauge { display: grid; grid-template-columns: 7px 15px; gap: 8px; align-items: stretch; }
+.pg-track {
+  position: relative; border: 1px solid var(--line); border-radius: 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--jin) 14%, transparent), transparent);
+}
+.pg-track i {
+  position: absolute; left: -1px; right: -1px; height: 3px; border-radius: 2px;
+  top: calc(var(--pos) * 100%); background: var(--zhu);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--zhu) 12%, transparent);
+  transition: top .5s ease;
+}
+.pg-labels {
+  display: flex; flex-direction: column; justify-content: space-between;
+  font-family: var(--sans); font-size: 9px; line-height: 1; color: var(--ink-3);
+  text-align: center; padding: 0;
+}
+.pa-wave { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pa-wave canvas { display: block; width: 100%; height: 148px; }
+.pa-facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.pa-fact {
+  font-family: var(--sans); font-size: 10px; color: var(--ink-3);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px;
+}
+.pa-fact b { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 详情：文字段落 */
+.pulse-text {
+  margin: 10px 0 0; font-size: 1.02rem; line-height: 2.08;
+  color: var(--ink-2); text-align: justify;
+}
+.pulse-ill { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+
+/* 详情：左右手六部分布 */
+.parts-grid {
+  display: grid; grid-template-columns: 24px repeat(3, 1fr);
+  gap: 8px; margin-top: 14px;
+}
+.pg-side {
+  display: grid; place-items: center; padding: 6px 0;
+  writing-mode: vertical-rl; letter-spacing: .16em;
+  font-family: var(--sans); font-size: 10px; color: var(--zhu);
+  background: color-mix(in srgb, var(--zhu) 5%, transparent); border-radius: 6px;
+}
+.part {
+  padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--paper-2);
+}
+.pt-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 5px; }
+.pt-head b { font-size: .9rem; font-weight: 600; letter-spacing: .08em; }
+.pt-head span { font-family: var(--sans); font-size: 9.5px; color: var(--ink-3); }
+.part p { margin: 0; font-size: .86rem; line-height: 1.88; color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .six-row { grid-template-columns: 1fr; }
+  .parts-grid { grid-template-columns: 24px 1fr 1fr; }
+  .pulse-stage { grid-template-columns: 1fr; }
+}
+
