@@ -17,3 +17,6 @@ web/icon.png
 # Python
 __pycache__/
 *.pyc
+
+# 截图
+*.png
