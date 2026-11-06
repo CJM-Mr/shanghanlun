@@ -1,0 +1,19 @@
+# 构建产物
+build/
+dist/
+*.spec
+
+# 数据产物（由 tools/build_all.py 生成）
+data/app.db
+data/raw/
+data/book.json
+data/hao_lectures.json
+tools/source/
+
+# 生成物
+icon.ico
+web/icon.png
+
+# Python
+__pycache__/
+*.pyc

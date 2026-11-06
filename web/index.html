@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="paper" data-mode="all">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>伤寒杂病论 · 研读</title>
+<link rel="icon" href="/icon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <header class="brand">
+      <div class="seal">傷</div>
+      <div class="brand-txt">
+        <h1>伤寒杂病论</h1>
+        <p>桂林古本 · 郝万山解读</p>
+      </div>
+    </header>
+
+    <div class="search-trigger" id="searchTrigger">
+      <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>搜索条文 · 方剂 · 讲稿</span>
+      <kbd>/</kbd>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-pane="chapters">原文</button>
+      <button class="tab" data-pane="lectures">郝万山</button>
+      <button class="tab" data-pane="formulas">方剂</button>
+      <button class="tab" data-pane="herbs">中药</button>
+      <button class="tab" data-pane="marks">收藏</button>
+    </nav>
+
+    <div class="panes" id="panes">
+      <div class="pane active" id="pane-chapters"></div>
+      <div class="pane" id="pane-lectures"></div>
+      <div class="pane" id="pane-formulas">
+        <div class="pane-filter"><input id="formulaFilter" placeholder="筛选方名 / 药物…" autocomplete="off"></div>
+        <div id="formulaList"></div>
+      </div>
+      <div class="pane" id="pane-herbs">
+        <div class="pane-filter"><input id="herbFilter" placeholder="筛选药名 / 功效…" autocomplete="off"></div>
+        <div id="herbList"></div>
+      </div>
+      <div class="pane" id="pane-marks"></div>
+    </div>
+
+    <footer class="side-foot">
+      <span id="footStats"></span>
+      <a href="#" id="aboutLink">资料来源</a>
+    </footer>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="topbar">
+      <div class="crumb" id="crumb">全书目录</div>
+      <div class="tools">
+        <div class="seg" id="modeSeg" title="阅读层级">
+          <button data-mode="origin">原文</button>
+          <button data-mode="both">原文+白话</button>
+          <button data-mode="all" class="on">全展开</button>
+        </div>
+        <div class="fontctl">
+          <button id="fontDown" title="缩小字号">A−</button>
+          <button id="fontUp" title="放大字号">A+</button>
+        </div>
+        <button class="iconbtn" id="themeBtn" title="切换纸色 / 夜读">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3a9 9 0 108.5 12A7.5 7.5 0 0112 3z" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <article class="reader" id="reader">
+      <div class="welcome">
+        <div class="welcome-seal">傷</div>
+        <h2>伤寒杂病论</h2>
+        <p class="welcome-sub">桂林古本三十四篇 · 逐条拆解 · 郝万山七十讲</p>
+        <div class="welcome-grid" id="welcomeGrid"></div>
+        <p class="welcome-hint">从左侧选择篇目开始阅读，按 <kbd>/</kbd> 可全书检索。</p>
+      </div>
+    </article>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="search-panel">
+    <div class="search-head">
+      <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="searchInput" placeholder="输入条文、方名或讲稿关键词…" autocomplete="off" spellcheck="false">
+      <button class="esc" id="searchClose">Esc</button>
+    </div>
+    <div class="search-body" id="searchBody">
+      <p class="search-empty">试试：桂枝汤 · 胃家实 · 柴胡 · 但欲寐</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
