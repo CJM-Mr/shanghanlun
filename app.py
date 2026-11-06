@@ -148,6 +148,34 @@ def api_pulse(no):
 CL = 'c.id,c.chapter_no,c.no,c.origin,c.translation,ch.title ctitle'
 PS = 'p.id,p.lecture_no,p.seq,p.title,p.text,l.title ltitle'
 
+
+def flat(v):
+    """把嵌套的 str/list/dict 摊平成字符串列表，便于整条脉象检索。"""
+    if isinstance(v, str):
+        return [v]
+    if isinstance(v, (list, tuple)):
+        return [x for i in v for x in flat(i)]
+    if isinstance(v, dict):
+        return [x for i in v.values() for x in flat(i)]
+    return []
+
+
+def match_pulses(q):
+    """脉象检索：兼容「弦脉」「xián」「肝胆病」等写法。"""
+    core = q[:-1] if len(q) > 1 and q.endswith('脉') else q
+    hits = []
+    for p in PUL.PULSES:
+        text = ' '.join([p['name'], p['py'], p['group'], p['shape'], p['why'],
+                         *flat(p['ill']), *flat(p['clinic'])])
+        if core in text or q in text:
+            hits.append({'no': p['no'], 'name': p['name'], 'py': p['py'],
+                         'group': p['group'], 'ill': p['ill'],
+                         'hit': core == p['name'] or q == p['name'] + '脉'})
+    hits.sort(key=lambda h: not h['hit'])       # 名称精确命中的排前面
+    for h in hits:
+        h.pop('hit')
+    return hits[:12]
+
 @app.get('/api/search')
 def api_search():
     q = (request.args.get('q') or '').strip()
@@ -175,14 +203,22 @@ def api_search():
         ps = rows(f'SELECT {PS} FROM passages p JOIN lectures l ON l.no=p.lecture_no '
                   f'WHERE p.text LIKE ? LIMIT 60', (like,))
 
-    fs = rows('SELECT id,name,chapter_no,func,herbs FROM formulas WHERE name LIKE ? OR herbs LIKE ? LIMIT 40', (like, like))
-    hs = rows('''SELECT id,name,category,nature,effect,formula_count FROM herbs
-                 WHERE name LIKE ? OR effect LIKE ? OR indication LIKE ? OR modern LIKE ?
-                 ORDER BY formula_count DESC LIMIT 20''', (like, like, like, like))
-    pu = [{'no': p['no'], 'name': p['name'], 'py': p['py'], 'group': p['group'], 'ill': p['ill']}
-          for p in PUL.PULSES
-          if q in p['name'] or q in p['shape'] or any(q in i for i in p['ill'])][:12]
-    return jsonify(q=q, clauses=cl, passages=ps, formulas=fs, herbs=hs, pulses=pu)
+    # 同名方散见多条，按方名去重（保留最早出现的一条）
+    seen, fs = set(), []
+    for f in rows('''SELECT id,name,chapter_no,func,herbs FROM formulas
+                     WHERE name LIKE ? OR herbs LIKE ?
+                     ORDER BY (name=?) DESC, (name LIKE ?) DESC, length(name), chapter_no, clause_no
+                     LIMIT 120''', (like, like, q, q + '%')):
+        if f['name'] not in seen:
+            seen.add(f['name'])
+            fs.append(f)
+    fs = fs[:40]
+    hs = rows('''SELECT id,name,category,nature,meridian,effect,formula_count FROM herbs
+                 WHERE name LIKE ? OR alias LIKE ? OR category LIKE ? OR nature LIKE ?
+                    OR meridian LIKE ? OR effect LIKE ? OR indication LIKE ? OR modern LIKE ?
+                 ORDER BY (name LIKE ?) DESC, formula_count DESC LIMIT 20''',
+              (like, like, like, like, like, like, like, like, like))
+    return jsonify(q=q, clauses=cl, passages=ps, formulas=fs, herbs=hs, pulses=match_pulses(q))
 
 @app.get('/api/ping')
 def api_ping():

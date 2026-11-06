@@ -30,7 +30,6 @@ const S = {
   route: { view: 'home', id: 0 },
   marks: store.get('marks', []),
   settings: store.get('settings', { mode: 'all', fs: 1, theme: 'paper' }),
-  pulseMap: new Map(),
 };
 
 /* ---------------- 通用片段 ---------------- */
@@ -95,26 +94,16 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('on'), 1600);
 }
 
-/* ---------------- 脉象动画 ---------------- */
+/* ---------------- 脉象图解（静态 SVG） ---------------- */
 const PULSE_DEF = { pos: .45, rate: 72, amp: 1, w: 1, ten: .5, slip: .5, span: 1, rhythm: 'reg', shape: 'normal' };
-const DPR = Math.min(2, window.devicePixelRatio || 1);
-let COL = { zhu: '#9c2b24', line: '#e3d8bf' };
-
-function readColors() {
-  const s = getComputedStyle(document.documentElement);
-  COL = {
-    zhu: s.getPropertyValue('--zhu').trim() || COL.zhu,
-    line: s.getPropertyValue('--line').trim() || COL.line,
-  };
-}
 
 const rnd = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
 /* 节律门：1 为正常搏动，0 为歇止 */
 const GATE = {
-  cu: i => (i % 4 === 3 ? 0 : 1),      // 促：数而时止，止无定数
-  jie: i => (i % 3 === 2 ? 0 : 1),     // 结：缓而时止，止无定数
-  dai: i => (i % 5 >= 3 ? 0 : 1),      // 代：止有定数，良久方来
+  cu: i => (i % 4 === 3 ? 0 : 1),      // 促：数而时止
+  jie: i => (i % 3 === 2 ? 0 : 1),     // 结：缓而时止
+  dai: i => (i % 5 >= 3 ? 0 : 1),      // 代：止有定数
 };
 
 /** 单次搏动的振幅，ph 为相位 0→1 */
@@ -133,66 +122,115 @@ function beat(ph, p, i) {
   return Math.max(0, a);
 }
 
-function drawTrace(cv, p, t) {
-  const W = cv.clientWidth, H = cv.clientHeight;
-  if (!W || !H) return;
-  if (cv.width !== Math.round(W * DPR)) {
-    cv.width = Math.round(W * DPR);
-    cv.height = Math.round(H * DPR);
+/** 采样一段观察窗内的波形，返回 path 与周期数 */
+function waveShape(p, W, base, amp) {
+  const win = p.rhythm === 'dai' ? 8 : p.rhythm === 'jie' ? 5 : 3.4;   // 观察窗（秒）
+  const cycles = Math.max(1.6, Math.min(8.5, (p.rate / 60) * win));
+  const N = 320, pts = [];
+  for (let i = 0; i <= N; i++) {
+    const tt = (i / N) * cycles, k = Math.floor(tt);
+    const ph = (tt - k - .4) / p.span + .4;
+    let a = beat(ph, p, k) * (GATE[p.rhythm] ? GATE[p.rhythm](k) : 1);
+    if (p.shape === 'dong' && (i / N < .34 || i / N > .66)) a = 0;    // 独见于关
+    pts.push([(i / N) * W, base - a * amp]);
   }
-  const c = cv.getContext('2d');
-  c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  c.clearRect(0, 0, W, H);
-
-  const base = H * .74, ampPx = H * .52 * p.amp;
-  c.strokeStyle = COL.line; c.lineWidth = 1; c.setLineDash([3, 5]);
-  c.beginPath(); c.moveTo(0, base + .5); c.lineTo(W, base + .5); c.stroke();
-  c.setLineDash([]);
-
-  const cycles = (p.rate / 60) * 2.4;   // 屏内 2.4 秒的搏动次数
-  const gate = GATE[p.rhythm];
-  const step = H < 80 ? 2 : 1;
-
-  c.beginPath();
-  for (let x = 0; x <= W; x += step) {
-    const tt = (x / W) * cycles + t * (p.rate / 60);
-    const i = Math.floor(tt);
-    const ph = (tt - i - .4) / p.span + .4;
-    let a = beat(ph, p, i) * (gate ? gate(i) : 1);
-    if (p.shape === 'dong' && (x < W * .34 || x > W * .66)) a = 0;   // 独见于关
-    const y = base - a * ampPx;
-    x ? c.lineTo(x, y) : c.moveTo(x, y);
-  }
-  c.strokeStyle = COL.zhu;
-  c.lineWidth = Math.max(1, 1.5 * p.w);
-  c.lineJoin = c.lineCap = 'round';
-  c.stroke();
+  return { d: 'M' + pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join('L'), cycles, pts };
 }
 
-let animId = 0, animT0 = 0, animLast = 0;
-function startPulseAnim() {
-  cancelAnimationFrame(animId);
-  const nodes = $$('canvas[data-pno]');
-  if (!nodes.length) return;
-  const items = nodes.map(cv => ({
-    cv, p: { ...PULSE_DEF, ...(S.pulseMap.get(+cv.dataset.pno) || {}).anim },
-  }));
-  animT0 = animLast = performance.now();
-  const step = now => {
-    animId = requestAnimationFrame(step);
-    if (now - animLast < 32) return;          // 约 30fps，28 个缩略图也不卡
-    animLast = now;
-    const t = (now - animT0) / 1000;
-    for (const it of items) drawTrace(it.cv, it.p, t);
+/** 总览卡片：一条静态波形 */
+function miniWave(p) {
+  const a = { ...PULSE_DEF, ...p.anim };
+  const { d } = waveShape(a, 150, 37, 26 * a.amp);
+  return `<svg class="pc-wave" viewBox="0 0 150 44" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" y1="37" x2="150" y2="37" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="var(--zhu)" stroke-width="1.4" vector-effect="non-scaling-stroke"
+          stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+/** 详情图解：左侧指下深浅（皮肉筋骨），右侧脉波形态并加标注 */
+function pulseDiagram(p) {
+  const a = { ...PULSE_DEF, ...p.anim };
+  const W = 520, BASE = 166, AMP = 96 * a.amp;
+  const { d, cycles, pts } = waveShape(a, W, BASE, AMP);
+  const xAt = ph => Math.min(W - 40, Math.max(40, (((ph - .4) * a.span + .4) / cycles) * W));
+  const yAt = ph => BASE - beat(ph, a, 0) * AMP;
+  // 取某区间内曲线的最高点，标注锚点一定落在线上
+  const peakIn = (x0 = 0, x1 = W) => {
+    const seg = pts.filter(q => q[0] >= x0 && q[0] <= x1);
+    return seg.reduce((m, q) => (q[1] < m[1] ? q : m), seg[0] || [W / 2, BASE]);
   };
-  animId = requestAnimationFrame(step);
+
+  // 标注只落在波形上下的留白区，再用细引线指向特征点，保证不压曲线
+  const marks = [];
+  const mark = (x, y, text, low = false) => marks.push({ x, y, text, low });
+  const at = (ph, text, low) => mark(xAt(ph), yAt(ph), text, low);
+
+  const dong = a.shape === 'dong';
+  if (dong) {
+    const [px, py] = peakIn(W * .33, W * .67);
+    mark(px, py, '关部独动');
+  } else {
+    at(a.shape === 'kou' ? .26 : .30, '主波');
+    if (a.slip >= .3 && cycles <= 5.5 && ['normal', 'taut', 'kou'].includes(a.shape)) at(.58, '重搏波');
+    if (a.shape === 'kou') at(.40, '中空', true);
+    if (a.shape === 'flood') at(.52, '来盛去衰');
+    if (a.shape === 'san') { const [px, py] = peakIn(); mark(px, py, '涣散无根'); }
+    if (a.shape === 'cuo') at(.55, '往来艰涩');
+  }
+
+  const gated = { cu: 3, jie: 2, dai: 3 }[a.rhythm];
+  if (gated != null) mark((gated + .5) / cycles * W, BASE, '歇止', true);
+
+  // 横向挤在一起时自动错行，避免文字互相覆盖
+  const ROWS = [14, 30, 46], placed = [];
+  marks.sort((m1, m2) => m1.x - m2.x).forEach(m => {
+    if (m.low) { m.ly = BASE + 22; return; }
+    const w = m.text.length * 10 + 8;
+    let row = 0;
+    while (row < ROWS.length - 1 &&
+           placed.some(q => q.row === row && Math.abs(q.x - m.x) < (q.w + w) / 2 + 10)) row++;
+    Object.assign(m, { row, w, ly: ROWS[row] });
+    placed.push(m);
+  });
+
+  const notes = marks.map(m => {
+    const [y1, y2] = m.low ? [m.ly - 12, m.y + 6] : [m.ly + 4, m.y - 6];
+    return `<line x1="${m.x.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${m.x.toFixed(1)}" y2="${y2.toFixed(1)}"
+             stroke="var(--ink-3)" stroke-width=".8" stroke-dasharray="2 3" opacity=".55"/>
+           <circle cx="${m.x.toFixed(1)}" cy="${m.y.toFixed(1)}" r="2.2" fill="var(--zhu)"/>
+           <text x="${m.x.toFixed(1)}" y="${m.ly}" class="dg-n" text-anchor="middle">${m.text}</text>`;
+  }).join('');
+
+  const bands = ['皮', '肉', '筋', '骨'].map((t, i) => `
+    <rect x="0" y="${i * 45}" width="140" height="45" stroke="var(--line-2)" stroke-width=".6"
+          fill="${i % 2 ? 'var(--paper-2)' : 'var(--paper-3)'}"/>
+    <text x="9" y="${i * 45 + 26}" class="dg-t">${t}</text>`).join('');
+
+  const vy = 10 + a.pos * 160;      // 脉管所在深度
+
+  return `<svg class="pulse-svg" viewBox="0 0 720 226" role="img" aria-label="${esc(p.name)}脉图解">
+    <text x="82" y="14" class="dg-n" text-anchor="middle">指</text>
+    <g transform="translate(12,22)">
+      ${bands}
+      <rect x="34" y="${vy - 5}" width="96" height="10" rx="5"
+            fill="var(--zhu)" fill-opacity=".16" stroke="var(--zhu)" stroke-width="1.2"/>
+      <line x1="82" y1="0" x2="82" y2="${vy - 8}" stroke="var(--zhu)" stroke-width="1"
+            stroke-dasharray="3 3" opacity=".6"/>
+      <path d="M78,${vy - 15} L86,${vy - 15} L82,${vy - 7} Z" fill="var(--zhu)"/>
+    </g>
+    <g transform="translate(186,22)">
+      <line x1="0" y1="${BASE}" x2="${W}" y2="${BASE}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 5"/>
+      <path d="${d}" fill="none" stroke="var(--zhu)" stroke-width="${(1.3 * a.w).toFixed(2)}"
+            stroke-linejoin="round" stroke-linecap="round"/>
+      ${notes}
+    </g>
+  </svg>`;
 }
 
 /* ---------------- 启动与设置 ---------------- */
 async function boot() {
   applySettings();
   S.boot = await api('/api/bootstrap');
-  S.pulseMap = new Map(S.boot.pulses.map(p => [p.no, p]));
   const { stats } = S.boot;
   $('#footStats').textContent = `${stats.c} 条 · ${stats.f} 方 · ${stats.p} 段`;
   renderSidebar();
@@ -208,7 +246,6 @@ function applySettings() {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.setProperty('--fs', (0.94 + fs * 0.06).toFixed(3) + 'rem');
   $$('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
-  readColors();
 }
 
 function saveSettings(patch) {
@@ -322,7 +359,7 @@ function route() {
   $('#main').scrollTop = 0;
 
   const render = RENDER[S.route.view];
-  Promise.resolve(render ? render(+id, q) : renderWelcome()).then(startPulseAnim);
+  render ? render(+id, q) : renderWelcome();
 }
 
 const go = hash => { location.hash = hash; };
@@ -542,7 +579,7 @@ function renderPulseOverview() {
             <span class="pc-py">${p.py}</span>
             <span class="pc-no">${String(p.no).padStart(2, '0')}</span>
           </div>
-          <canvas data-pno="${p.no}"></canvas>
+          ${miniWave(p)}
           <div class="pc-ill">${esc(p.ill.join(' · '))}</div>
         </a>`).join('')}</div>
     </div>`;
@@ -609,14 +646,8 @@ async function viewPulse(no) {
     ${hero(`二十八脉 · ${p.group}`, `${esc(p.name)}脉<span class="hero-alias">${p.py}</span>`,
       mi('序', `${p.no} / 28`) + mi('归类', p.group) + mi('主病', esc(p.ill[0])))}
     <div class="pulse-stage">
-      <div class="pa-gauge" style="--pos:${a.pos}">
-        <div class="pg-track"><i></i></div>
-        <div class="pg-labels"><span>皮</span><span>肉</span><span>筋</span><span>骨</span></div>
-      </div>
-      <div class="pa-wave">
-        <canvas data-pno="${p.no}"></canvas>
-        <div class="pa-facts">${facts.map(f => `<span class="pa-fact">${f}</span>`).join('')}</div>
-      </div>
+      ${pulseDiagram(p)}
+      <div class="pa-facts">${facts.map(f => `<span class="pa-fact">${f}</span>`).join('')}</div>
     </div>
     ${section('脉象体状', '指下所得', `<p class="pulse-text">${esc(p.shape)}</p>`)}
     ${section('形成原理', '何以有此象', `<p class="pulse-text">${esc(p.why)}</p>`)}
@@ -628,7 +659,8 @@ async function viewPulse(no) {
 }
 
 /* ---------------- 搜索 ---------------- */
-const SEARCH_TIP = '<p class="search-empty">试试：桂枝汤 · 胃家实 · 柴胡 · 弦脉 · 但欲寐</p>';
+const SEARCH_TIP = `<p class="search-empty">试试：桂枝汤 · 柴胡 · 弦脉 · 胃家实 · 但欲寐</p>
+  <p class="search-empty s-hint">方剂、中药、脉象、条文、讲稿一起搜</p>`;
 let searchTimer, searchItems = [], searchSel = -1;
 
 function openSearch() {
@@ -659,33 +691,42 @@ async function doSearch(q) {
       <div class="x">${text}</div>
     </button>`;
 
+  // 实体类结果（方剂 / 中药 / 脉象）排在条文之前，避免被几十条条文挤到屏幕外
   const groups = [
-    ['条文', d.clauses, c => item(`#/c/${c.chapter_no}?c=${c.no}`,
-      `${esc(c.ctitle)} · 第 ${c.no} 条`,
-      snip(c.origin + ' ' + (c.translation || '')))],
-    ['方剂', d.formulas, f => item(`#/f/${f.id}`,
+    ['方剂', d.formulas, 6, f => item(`#/f/${f.id}`,
       `第${cnNum(f.chapter_no)}篇 · 方剂`,
       `${hl(f.name)}<span class="s-sub">${esc(f.func || '')}</span>`)],
-    ['中药', d.herbs, h => item(`#/h/${h.id}`,
-      `${esc(h.category)} · 见于 ${h.formula_count} 方`,
+    ['中药', d.herbs, 6, h => item(`#/h/${h.id}`,
+      `${esc(h.category || '中药')} · 见于 ${h.formula_count} 处`,
       `${hl(h.name)}<span class="s-sub">${esc(h.nature || '')}　${esc((h.effect || '').slice(0, 24))}</span>`)],
-    ['脉象', d.pulses, p => item(`#/p/${p.no}`,
+    ['脉象', d.pulses, 6, p => item(`#/p/${p.no}`,
       `${esc(p.group)} · ${p.py}`,
       `${hl(p.name)}脉<span class="s-sub">${esc((p.ill || []).join(' · '))}</span>`)],
-    ['郝万山讲稿', d.passages, p => item(`#/l/${p.lecture_no}`,
+    ['条文', d.clauses, 5, c => item(`#/c/${c.chapter_no}?c=${c.no}`,
+      `${esc(c.ctitle)} · 第 ${c.no} 条`,
+      snip(c.origin + ' ' + (c.translation || '')))],
+    ['郝万山讲稿', d.passages, 4, p => item(`#/l/${p.lecture_no}`,
       `第 ${p.lecture_no} 讲 · ${esc(p.ltitle)}`,
       snip(p.text))],
   ];
 
-  const html = groups.map(([label, list, build]) => {
-    if (!list?.length) return '';
-    const shown = list.slice(0, 8);
-    const rest = list.length - shown.length;
-    return `<div class="s-group"><h4>${label} · ${list.length}</h4>${shown.map(build).join('')}
+  const hit = groups.filter(([, list]) => list?.length);
+  if (!hit.length) {
+    $('#searchBody').innerHTML = `<p class="search-empty">没有找到「${esc(q)}」</p>`;
+    searchItems = []; searchSel = -1;
+    return;
+  }
+
+  const chips = hit.map(([label, list], i) =>
+    `<button class="s-chip" data-jump="sg${i}">${label}<b>${list.length}</b></button>`).join('');
+
+  const body = hit.map(([label, list, cap, build], i) => {
+    const shown = list.slice(0, cap), rest = list.length - shown.length;
+    return `<div class="s-group" id="sg${i}"><h4>${label} · ${list.length}</h4>${shown.map(build).join('')}
       ${rest > 0 ? `<p class="s-more">另有 ${rest} 条，加长关键词可收窄</p>` : ''}</div>`;
   }).join('');
 
-  $('#searchBody').innerHTML = html || `<p class="search-empty">没有找到「${esc(q)}」</p>`;
+  $('#searchBody').innerHTML = `<div class="s-chips">${chips}</div>${body}`;
   searchItems = $$('.s-item');
   searchSel = -1;
 }
@@ -752,6 +793,11 @@ function bindEvents() {
     searchTimer = setTimeout(() => doSearch(q), 160);
   });
   $('#searchBody').addEventListener('click', e => {
+    const chip = e.target.closest('.s-chip');
+    if (chip) {
+      document.getElementById(chip.dataset.jump)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      return;
+    }
     const it = e.target.closest('.s-item');
     if (it) { closeSearch(); go(it.dataset.go.slice(1)); }
   });
