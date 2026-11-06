@@ -44,6 +44,13 @@ def row(sql, args=()):
     r = db().execute(sql, args).fetchone()
     return dict(r) if r else None
 
+def group(items, key):
+    """按字段分组：{值: [item, ...]}"""
+    out = {}
+    for it in items:
+        out.setdefault(it[key], []).append(it)
+    return out
+
 # ---------------- API ----------------
 @app.get('/api/bootstrap')
 def api_bootstrap():
@@ -55,10 +62,7 @@ def api_bootstrap():
     stats = row("""SELECT (SELECT COUNT(*) FROM clauses) c, (SELECT COUNT(*) FROM formulas) f,
                    (SELECT COUNT(*) FROM passages) p, (SELECT COUNT(*) FROM herbs) h,
                    (SELECT SUM(char_count) FROM clauses) chars""")
-    cats = []
-    for c in chapters:
-        if c['category'] not in cats:
-            cats.append(c['category'])
+    cats = list(dict.fromkeys(c['category'] for c in chapters))
     return jsonify(chapters=chapters, lectures=lectures, formulas=formulas, herbs=herbs,
                    sources=sources, stats=stats, categories=cats,
                    book={'title': '伤寒杂病论', 'edition': '桂林古本 · 白云阁藏本系统',
@@ -70,10 +74,7 @@ def api_chapter(no):
     if not ch:
         abort(404)
     clauses = rows('SELECT id,chapter_no,no,origin,translation,note,char_count FROM clauses WHERE chapter_no=? ORDER BY no', (no,))
-    fs = rows('SELECT * FROM formulas WHERE chapter_no=? ORDER BY clause_no,id', (no,))
-    by_clause = {}
-    for f in fs:
-        by_clause.setdefault(f['clause_no'], []).append(f)
+    by_clause = group(rows('SELECT * FROM formulas WHERE chapter_no=? ORDER BY clause_no,id', (no,)), 'clause_no')
     for c in clauses:
         c['formulas'] = by_clause.get(c['no'], [])
     passages = rows('''SELECT id,lecture_no,seq,title,text,formula_names FROM passages
@@ -129,39 +130,37 @@ def api_herb(hid):
             uniq.append(f)
     return jsonify(herb=h, formulas=uniq, chapters=chs)
 
-def _fts_query(q):
-    return '"' + q.replace('"', '""') + '"'
+CL = 'c.id,c.chapter_no,c.no,c.origin,c.translation,ch.title ctitle'
+PS = 'p.id,p.lecture_no,p.seq,p.title,p.text,l.title ltitle'
 
 @app.get('/api/search')
 def api_search():
     q = (request.args.get('q') or '').strip()
     if not q:
-        return jsonify(q=q, clauses=[], passages=[], formulas=[])
-    like = '%' + q + '%'
-    if len(q) >= 3:
+        return jsonify(q=q, clauses=[], passages=[], formulas=[], herbs=[])
+
+    like, cl, ps = '%' + q + '%', [], []
+
+    if len(q) >= 3:                     # 三字以上走 FTS5 trigram 倒排索引
         try:
-            cl = rows('''SELECT c.id,c.chapter_no,c.no,c.origin,c.translation,ch.title ctitle
-                         FROM clause_fts f JOIN clauses c ON c.id=f.rowid
-                         JOIN chapters ch ON ch.no=c.chapter_no
-                         WHERE clause_fts MATCH ? ORDER BY rank LIMIT 60''', (_fts_query(q),))
-            ps = rows('''SELECT p.id,p.lecture_no,p.seq,p.title,p.text,l.title ltitle
-                         FROM passage_fts f JOIN passages p ON p.id=f.rowid
-                         JOIN lectures l ON l.no=p.lecture_no
-                         WHERE passage_fts MATCH ? ORDER BY rank LIMIT 60''', (_fts_query(q),))
+            term = '"' + q.replace('"', '""') + '"'
+            cl = rows(f'SELECT {CL} FROM clause_fts f JOIN clauses c ON c.id=f.rowid '
+                      f'JOIN chapters ch ON ch.no=c.chapter_no '
+                      f'WHERE clause_fts MATCH ? ORDER BY rank LIMIT 60', (term,))
+            ps = rows(f'SELECT {PS} FROM passage_fts f JOIN passages p ON p.id=f.rowid '
+                      f'JOIN lectures l ON l.no=p.lecture_no '
+                      f'WHERE passage_fts MATCH ? ORDER BY rank LIMIT 60', (term,))
         except sqlite3.OperationalError:
             cl, ps = [], []
-    else:
-        cl, ps = [], []
-    if not cl:
-        cl = rows('''SELECT c.id,c.chapter_no,c.no,c.origin,c.translation,ch.title ctitle
-                     FROM clauses c JOIN chapters ch ON ch.no=c.chapter_no
-                     WHERE c.origin LIKE ? OR c.translation LIKE ? LIMIT 60''', (like, like))
+
+    if not cl:                          # 不足三字或索引无命中时退回 LIKE
+        cl = rows(f'SELECT {CL} FROM clauses c JOIN chapters ch ON ch.no=c.chapter_no '
+                  f'WHERE c.origin LIKE ? OR c.translation LIKE ? LIMIT 60', (like, like))
     if not ps:
-        ps = rows('''SELECT p.id,p.lecture_no,p.seq,p.title,p.text,l.title ltitle
-                     FROM passages p JOIN lectures l ON l.no=p.lecture_no
-                     WHERE p.text LIKE ? LIMIT 60''', (like,))
-    fs = rows('''SELECT id,name,chapter_no,func,herbs FROM formulas
-                 WHERE name LIKE ? OR herbs LIKE ? LIMIT 40''', (like, like))
+        ps = rows(f'SELECT {PS} FROM passages p JOIN lectures l ON l.no=p.lecture_no '
+                  f'WHERE p.text LIKE ? LIMIT 60', (like,))
+
+    fs = rows('SELECT id,name,chapter_no,func,herbs FROM formulas WHERE name LIKE ? OR herbs LIKE ? LIMIT 40', (like, like))
     hs = rows('''SELECT id,name,category,nature,effect,formula_count FROM herbs
                  WHERE name LIKE ? OR effect LIKE ? OR indication LIKE ? OR modern LIKE ?
                  ORDER BY formula_count DESC LIMIT 20''', (like, like, like, like))

@@ -194,8 +194,8 @@ kbd {
   font-family: var(--sans); font-size: 12px; outline: none;
 }
 .pane-filter input:focus { border-color: var(--zhu-soft); }
-.f-item { font-size: 12.8px; padding: 6px 10px; }
-.f-item small { color: var(--ink-3); font-family: var(--sans); font-size: 10px; }
+.f-item { font-size: 12.8px; padding: 6px 10px; align-items: flex-start; }
+.f-item small { color: var(--ink-3); font-family: var(--sans); font-size: 10px; padding-top: 3px; }
 
 .side-foot {
   display: flex; justify-content: space-between; align-items: center;
@@ -367,9 +367,20 @@ body[data-mode="both"] .note { display: none; }
   font-size: 11px; color: var(--qing); text-decoration: none;
   border-bottom: 1px dotted currentColor;
 }
+.mark-link { border-bottom: 0; letter-spacing: .06em; cursor: pointer; }
+.mark-link:hover { color: var(--zhu); }
 
-/* ---------- 郝万山解读区 ---------- */
-.hao-sec { margin-top: 46px; padding-top: 30px; border-top: 2px solid var(--line); }
+/* 方剂页引用的条文：无编号、无缩进 */
+.clause.plain { padding: 18px 0 4px; border-bottom: 0; }
+.clause.plain .origin { font-size: 1.08rem; line-height: 2.02; }
+.clause.plain > .f-link { position: static; opacity: .85; margin-top: 14px; }
+
+/* 方剂详情：常开卡片 */
+.formula.static { margin-top: 24px; }
+.formula.static .f-body { padding-top: 14px; }
+
+/* ---------- 通用区块 ---------- */
+.sec { margin-top: 46px; padding-top: 30px; border-top: 2px solid var(--line); }
 .sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
 .sec-head h3 {
   margin: 0; font-size: 1.22rem; font-weight: 600; letter-spacing: .08em;
@@ -423,6 +434,7 @@ body[data-mode="both"] .note { display: none; }
 }
 .lec-body p.f { color: var(--ink-2); }
 .pill-row { display: flex; flex-wrap: wrap; gap: 7px; margin: 14px 0 4px; }
+.pill-row.tight { margin: 10px 0 2px; }
 .pill {
   font-family: var(--sans); font-size: 11px; color: var(--ink-2);
   background: var(--paper-3); border: 1px solid var(--line);
@@ -515,17 +527,30 @@ body[data-mode="both"] .note { display: none; }
 }
 .s-item {
   display: block; width: 100%; text-align: left; border: 0;
-  background: transparent; cursor: pointer; padding: 9px 10px;
+  background: transparent; cursor: pointer; padding: 7px 10px;
   border-radius: 8px; font-family: inherit; color: var(--ink-2);
   transition: background .12s;
 }
 .s-item:hover, .s-item.sel { background: var(--paper-3); }
 .s-item .t {
   font-family: var(--sans); font-size: 10px; color: var(--zhu);
-  letter-spacing: .06em; margin-bottom: 3px;
+  letter-spacing: .06em; margin-bottom: 2px;
 }
-.s-item .x { font-size: .9rem; line-height: 1.8; }
+.s-item .x { font-size: .9rem; line-height: 1.65; }
 .s-item .x em { font-style: normal; color: var(--zhu); background: rgba(156, 43, 36, .1); border-radius: 2px; padding: 0 1px; }
+.s-sub {
+  display: block; margin-top: 1px;
+  font-family: var(--sans); font-size: 10.5px; line-height: 1.6; color: var(--ink-3);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.s-note { color: var(--ink-3); letter-spacing: 0; font-size: 10.5px; }
+.s-more {
+  margin: 2px 10px 6px; font-family: var(--sans); font-size: 10.5px; color: var(--ink-3);
+}
+.s-intro {
+  margin: 6px 8px 2px; font-size: .88rem; line-height: 1.95;
+  color: var(--ink-2); text-align: justify;
+}
 
 /* ---------- 杂项 ---------- */
 .toast {
@@ -580,7 +605,7 @@ body[data-mode="both"] .note { display: none; }
 .hb-v.modern { color: var(--ink-2); font-size: .93rem; }
 .hb-note {
   margin-top: 18px; padding: 10px 14px; border-radius: 8px;
-  background: color-mix(in srgb, var(--qing) 7%, transparent);
-  font-family: var(--sans); font-size: 10.5px; line-height: 1.9; color: var(--ink-3);
+  background: color-mix(in srgb, var(--qing) 8%, transparent);
+  font-family: var(--sans); font-size: 10.5px; line-height: 1.9; color: var(--ink-2);
 }
 .herb-item .ch-title { font-size: 13.2px; }
