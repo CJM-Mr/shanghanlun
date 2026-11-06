@@ -44,6 +44,24 @@ const section = (title, meta = '', body = '') => `
     ${body}
   </section>`;
 
+/** 页头：分类标签 + 标题 + 元信息行 + 附加内容 */
+const hero = (cat, title, meta = '', extra = '') => `
+  <header class="hero">
+    <span class="hero-cat">${cat}</span>
+    <h2>${title}</h2>
+    ${meta ? `<div class="hero-meta">${meta}</div>` : ''}
+    ${extra}
+  </header>`;
+
+/** 元信息项，如「条文 35」 */
+const mi = (k, v) => `<span>${k} <b>${v}</b></span>`;
+
+/** 条文正文：原文 / 白话 / 按语 */
+const clauseBody = c => `
+  <p class="origin">${esc(c.origin)}</p>
+  ${c.translation ? `<p class="trans"><span class="lb">白话</span>${esc(c.translation)}</p>` : ''}
+  ${c.note ? `<p class="note"><span class="lb">按</span>${esc(c.note)}</p>` : ''}`;
+
 /** 折叠条目：no 左侧标签，title 主文，body 展开内容 */
 const accItem = (no, title, body, { preview = '', open = false, src = '' } = {}) => `
   <div class="acc-item${open ? ' open' : ''}">
@@ -224,17 +242,10 @@ async function viewChapter(no, q) {
   markActive('c' + no);
 
   $('#reader').innerHTML = `
-    <header class="hero">
-      <span class="hero-cat">${esc(ch.category)} · 第${cnNum(ch.no)}篇</span>
-      <h2>${esc(ch.title)}</h2>
-      <div class="hero-meta">
-        <span>条文 <b>${ch.clause_count}</b></span>
-        <span>方剂 <b>${ch.formula_count}</b></span>
-        <span>原文 <b>${ch.char_count.toLocaleString()}</b> 字</span>
-        <span>郝万山讲解 <b>${d.passages.length}</b> 段</span>
-      </div>
-      ${ch.guide ? `<div class="guide">${ch.guide.split('\n').map(p => `<p>${esc(p)}</p>`).join('')}</div>` : ''}
-    </header>
+    ${hero(`${esc(ch.category)} · 第${cnNum(ch.no)}篇`, esc(ch.title),
+      mi('条文', ch.clause_count) + mi('方剂', ch.formula_count) +
+      mi('原文', ch.char_count.toLocaleString() + ' 字') + mi('郝万山讲解', d.passages.length + ' 段'),
+      ch.guide ? `<div class="guide">${ch.guide.split('\n').map(p => `<p>${esc(p)}</p>`).join('')}</div>` : '')}
     <div class="clauses">${d.clauses.map(clauseHTML).join('') || '<div class="empty">本篇暂无条文</div>'}</div>
     ${haoSection(d.passages)}
     ${pager(d.prev, d.next)}`;
@@ -252,9 +263,7 @@ function clauseHTML(c) {
   return `
     <section class="clause" id="cl-${c.no}">
       <div class="cno">${c.no}</div>
-      <p class="origin">${esc(c.origin)}</p>
-      ${c.translation ? `<p class="trans"><span class="lb">白话</span>${esc(c.translation)}</p>` : ''}
-      ${c.note ? `<p class="note"><span class="lb">按</span>${esc(c.note)}</p>` : ''}
+      ${clauseBody(c)}
       ${c.formulas.map(formulaHTML).join('')}
       <a class="f-link mark-link" href="#" data-mark="${c.no}">${marked ? '★ 已收藏' : '☆ 收藏'}</a>
     </section>`;
@@ -312,16 +321,10 @@ async function viewLecture(no) {
   const fmap = new Map(S.boot.formulas.map(f => [f.name, f.id]));
 
   $('#reader').innerHTML = `
-    <header class="hero">
-      <span class="hero-cat">郝万山 · 讲稿</span>
-      <h2>第${L.no}讲　${esc(L.title)}</h2>
-      <div class="hero-meta">
-        <span>讲稿 <b>${L.char_count.toLocaleString()}</b> 字</span>
-        <span>分 <b>${L.passage_count}</b> 段</span>
-        ${d.chapter ? `<span>对应 <b>${esc(d.chapter.title)}</b></span>` : '<span>通论 / 专题</span>'}
-      </div>
-      ${pills(names.map(n => fmap.has(n) ? pill(`#/f/${fmap.get(n)}`, n) : `<span class="pill">${esc(n)}</span>`))}
-    </header>
+    ${hero('郝万山 · 讲稿', `第${L.no}讲　${esc(L.title)}`,
+      mi('讲稿', L.char_count.toLocaleString() + ' 字') + mi('分段', L.passage_count) +
+      (d.chapter ? mi('对应', esc(d.chapter.title)) : '<span>通论 / 专题</span>'),
+      pills(names.map(n => fmap.has(n) ? pill(`#/f/${fmap.get(n)}`, n) : `<span class="pill">${esc(n)}</span>`)))}
     <div class="lec-body">${d.passages.map(p => `<p>${esc(p.text)}</p>`).join('')}</div>
     ${d.chapter ? pager({ no: d.chapter.no, title: d.chapter.title }, null, '篇') : ''}
     ${pager(d.prev, d.next, '讲')}`;
@@ -343,18 +346,12 @@ async function viewFormula(id) {
   const c = d.clause;
   const source = c ? section('出处条文', `第 ${c.no} 条`, `
     <div class="clause plain">
-      <p class="origin">${esc(c.origin)}</p>
-      ${c.translation ? `<p class="trans"><span class="lb">白话</span>${esc(c.translation)}</p>` : ''}
-      ${c.note ? `<p class="note"><span class="lb">按</span>${esc(c.note)}</p>` : ''}
+      ${clauseBody(c)}
       <a class="f-link" href="#/c/${c.chapter_no}?c=${c.no}">在篇章中查看 →</a>
     </div>`) : '';
 
   $('#reader').innerHTML = `
-    <header class="hero">
-      <span class="hero-cat">方剂 · 第${cnNum(f.chapter_no)}篇</span>
-      <h2>${esc(f.name)}</h2>
-      ${f.func ? `<div class="hero-meta"><span>功用 <b>${esc(f.func)}</b></span></div>` : ''}
-    </header>
+    ${hero(`方剂 · 第${cnNum(f.chapter_no)}篇`, esc(f.name), f.func ? mi('功用', esc(f.func)) : '')}
     <div class="formula static open">
       <div class="f-body">
         ${f.herbs ? row('组成', f.herbs, 'herbs') : row('组成', '底本未列组成，见原文。')}
@@ -381,7 +378,7 @@ async function viewHerb(id) {
   const head = d.formulas.slice(0, CAP), rest = d.formulas.slice(CAP);
   const toPill = f => pill(`#/f/${f.id}`, f.name, f.func);
 
-  const formulas = d.formulas.length ? section('相关方剂', `共 ${d.formulas.length} 首`,
+  const formulas = d.formulas.length ? section('相关方剂', `去重 ${d.formulas.length} 首 · 全书引用 ${h.formula_count} 处`,
     pills(head.map(toPill)) +
     (rest.length ? `<div class="pill-row" id="morePills" hidden>${rest.map(toPill).join('')}</div>
       <button class="more-btn" data-more>展开其余 ${rest.length} 首 ▾</button>` : '')) : '';
@@ -390,15 +387,13 @@ async function viewHerb(id) {
     pills(d.chapters.map(c => pill(`#/c/${c.no}`, c.title)))) : '';
 
   $('#reader').innerHTML = `
-    <header class="hero">
-      <span class="hero-cat">${esc(h.category)}</span>
-      <h2>${esc(h.name)}${h.alias && h.alias !== h.name ? `<span class="hero-alias">别名 ${esc(h.alias)}</span>` : ''}</h2>
-      <div class="hb-chips">
+    ${hero(esc(h.category),
+      esc(h.name) + (h.alias && h.alias !== h.name ? `<span class="hero-alias">别名 ${esc(h.alias)}</span>` : ''),
+      '', `<div class="hb-chips">
         <span class="hb-chip zhu"><b>性味</b>${esc(h.nature)}</span>
         <span class="hb-chip zhu"><b>归经</b>${esc(h.meridian)}</span>
-        <span class="hb-chip"><b>见于</b>${h.formula_count} 方</span>
-      </div>
-    </header>
+        <span class="hb-chip"><b>见于</b>${h.formula_count} 处</span>
+      </div>`)}
     <div class="hb-fields">
       <div class="hb-row"><div class="hb-k">功效</div><div class="hb-v">${esc(h.effect)}</div></div>
       <div class="hb-row"><div class="hb-k">主治</div><div class="hb-v">${esc(h.indication)}</div></div>
