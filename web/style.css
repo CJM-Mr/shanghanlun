@@ -728,3 +728,31 @@ body[data-mode="both"] .note { display: none; }
   .pulse-stage { grid-template-columns: 1fr; }
 }
 
+
+/* 详情：临床应用 */
+.clinic { margin-top: 8px; border-top: 1px solid var(--line); }
+.cl-row {
+  display: grid; grid-template-columns: 76px 1fr; gap: 16px;
+  padding: 16px 0; border-bottom: 1px dashed var(--line-2);
+}
+.cl-row:last-child { border-bottom: 0; padding-bottom: 4px; }
+.cl-k {
+  font-family: var(--sans); font-size: 10.5px; letter-spacing: .14em;
+  color: var(--ink-3); padding-top: 6px;
+}
+.cl-v { font-size: .96rem; line-height: 2.02; color: var(--ink-2); text-align: justify; }
+.combo {
+  display: grid; grid-template-columns: auto 1fr; gap: 8px 16px;
+  margin: 0; padding: 0; list-style: none;
+}
+.combo li { display: contents; }
+.combo b {
+  font-weight: 600; font-size: .94rem; color: var(--zhu);
+  letter-spacing: .04em; white-space: nowrap; line-height: 1.95;
+}
+.combo span { font-size: .94rem; line-height: 1.95; color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .cl-row { grid-template-columns: 1fr; gap: 6px; }
+  .cl-k { padding-top: 0; }
+}

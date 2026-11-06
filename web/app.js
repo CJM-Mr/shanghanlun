@@ -562,6 +562,22 @@ function renderPulseOverview() {
     ${groups}`;
 }
 
+/* 临床应用：辨证要点 / 兼脉辨治 / 治法 / 病证 / 鉴别 */
+function clinicBlock(p) {
+  const c = p.clinic;
+  if (!c) return '';
+  const row = (k, v) => `<div class="cl-row"><div class="cl-k">${k}</div><div class="cl-v">${v}</div></div>`;
+  return `
+    <div class="clinic">
+      ${row('辨证要点', esc(c.key))}
+      ${row('兼脉辨治', `<ul class="combo">${c.combo.map(([k, v]) =>
+        `<li><b>${esc(k)}</b><span>${esc(v)}</span></li>`).join('')}</ul>`)}
+      ${row('治法方向', esc(c.treat))}
+      ${row('常见病证', `<div class="pill-row tight">${c.cases.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`)}
+      ${row('类脉鉴别', esc(c.diff))}
+    </div>`;
+}
+
 async function viewPulse(no) {
   if (!no) return renderPulseOverview();
 
@@ -607,6 +623,7 @@ async function viewPulse(no) {
     ${section('主　病', `${p.ill.length} 类`, `<div class="pulse-ill">${p.ill.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`)}
     ${section('相关反应', '临床可见', `<p class="pulse-text">${esc(p.signs)}</p>`)}
     ${section('左右手六部', '寸关尺各有所主', `<div class="parts-grid">${parts}</div>`)}
+    ${section('临床应用', '辨证 · 兼脉 · 治法 · 病证 · 鉴别', clinicBlock(p))}
     ${pager(d.prev, d.next, '脉')}`;
 }
 
