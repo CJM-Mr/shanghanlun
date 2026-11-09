@@ -45,8 +45,8 @@ const section = (title, meta = '', body = '') => `
   </section>`;
 
 /** 页头：分类标签 + 标题 + 元信息行 + 附加内容 */
-const hero = (cat, title, meta = '', extra = '') => `
-  <header class="hero">
+const hero = (cat, title, meta = '', extra = '', ac = '') => `
+  <header class="hero"${ac ? ` style="--ac:${ac}"` : ''}>
     <span class="hero-cat">${cat}</span>
     <h2>${title}</h2>
     ${meta ? `<div class="hero-meta">${meta}</div>` : ''}
@@ -74,7 +74,7 @@ const accItem = (no, title, body, { preview = '', open = false, src = '' } = {})
     <div class="acc-body">${body}${src ? `<span class="src">${src}</span>` : ''}</div>
   </div>`;
 
-const PAGER_ROUTE = { 篇: 'c', 讲: 'l', 脉: 'p' };
+const PAGER_ROUTE = { 篇: 'c', 讲: 'l', 脉: 'p', 经: 'a/m' };
 const pager = (prev, next, kind = '篇') => {
   const r = PAGER_ROUTE[kind] || 'c';
   const label = o => esc(o.name || o.title || '');
@@ -256,7 +256,7 @@ function saveSettings(patch) {
 
 /* ---------------- 侧栏 ---------------- */
 function renderSidebar() {
-  const { chapters, lectures, categories, formulas, herbs } = S.boot;
+  const { chapters, lectures, categories, formulas, herbs, meridians } = S.boot;
 
   $('#pane-chapters').innerHTML = categories.map(cat => {
     const list = chapters.filter(c => c.category === cat);
@@ -278,6 +278,7 @@ function renderSidebar() {
   renderFormulaList('');
   renderHerbList('');
   renderPulseList();
+  renderAcuList();
   renderMarks();
 
   $('#formulaFilter').addEventListener('input', e => renderFormulaList(e.target.value.trim()));
@@ -317,6 +318,28 @@ function renderPulseList() {
   }).join('');
 }
 
+function renderAcuList() {
+  const { meridians } = S.boot;
+  $('#pane-acu').innerHTML = `
+    <div class="cat-head"><i></i>石氏针法</div>
+    <a class="ch-item" href="#/a/x" data-key="x">
+      <span class="ch-title">醒脑开窍针法<span class="py">石学敏</span></span>
+      <span class="ch-meta">专法</span>
+    </a>
+    <div class="cat-head"><i></i>十四经脉 · ${meridians.reduce((n, m) => n + m.count, 0)} 穴</div>
+    ${meridians.map(m => `
+      <a class="ch-item" href="#/a/m/${m.no}" data-key="m${m.no}">
+        <span class="ch-no">${String(m.no).padStart(2, '0')}</span>
+        <span class="ch-title">${esc(m.short)}</span>
+        <span class="ch-meta">${m.count}</span>
+      </a>`).join('')}
+    <div class="cat-head"><i></i>临床应用</div>
+    <a class="ch-item" href="#/a/c" data-key="clinic">
+      <span class="ch-title">常见病配穴<span class="py">十四类</span></span>
+      <span class="ch-meta">现代</span>
+    </a>`;
+}
+
 function renderMarks() {
   $('#pane-marks').innerHTML = S.marks.length ? S.marks.map(m => `
     <a class="ch-item" href="#/c/${m.chapter_no}?c=${m.no}">
@@ -326,7 +349,7 @@ function renderMarks() {
     </a>`).join('') : '<div class="empty">还没有收藏<br>阅读时点击条文右上角的 ☆</div>';
 }
 
-const PANE_OF = { chapter: 'chapters', lecture: 'lectures', formula: 'formulas', herb: 'herbs', pulse: 'pulses', home: 'chapters' };
+const PANE_OF = { chapter: 'chapters', lecture: 'lectures', formula: 'formulas', herb: 'herbs', pulse: 'pulses', acu: 'acu', home: 'chapters' };
 
 function activatePane(name) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.pane === name));
@@ -339,8 +362,8 @@ function markActive(key) {
 }
 
 /* ---------------- 路由 ---------------- */
-const VIEWS = { c: 'chapter', l: 'lecture', f: 'formula', h: 'herb', p: 'pulse' };
-const RENDER = { chapter: viewChapter, lecture: viewLecture, formula: viewFormula, herb: viewHerb, pulse: viewPulse };
+const VIEWS = { c: 'chapter', l: 'lecture', f: 'formula', h: 'herb', p: 'pulse', a: 'acu' };
+const RENDER = { chapter: viewChapter, lecture: viewLecture, formula: viewFormula, herb: viewHerb, pulse: viewPulse, acu: viewAcu };
 
 /* 站内访问栈：末位为当前页，用于「返回上一页」 */
 const NAV = [];
@@ -392,6 +415,7 @@ function route() {
   const [, kind, id] = path.split('/');
   S.route = { view: VIEWS[kind] || 'home', id: +id };
   activatePane(PANE_OF[S.route.view]);
+  $('#modeSeg').style.display = S.route.view === 'acu' ? 'none' : '';   // 阅读层级只对篇章有效
   $('#main').scrollTop = 0;
 
   const render = RENDER[S.route.view];
@@ -695,9 +719,225 @@ async function viewPulse(no) {
     ${pager(d.prev, d.next, '脉')}`;
 }
 
+/* ---------------- 针灸 ---------------- */
+const ACU_TONE = ['dai', 'qing', 'jin', 'zhu', 'zi', 'cheng'];
+
+/** 十四经卡片 */
+const mcard = (m, i) => `
+  <a class="mcard" href="#/a/m/${m.no}" style="--ac:var(--${ACU_TONE[i % 6]})">
+    <div class="mc-top">
+      <span class="mc-no">${String(m.no).padStart(2, '0')}</span>
+      <span class="mc-count">${m.count} 穴</span>
+    </div>
+    <div class="mc-name">${esc(m.name)}</div>
+    <div class="mc-organ">${esc(m.organ)}</div>
+    <div class="mc-ind">${m.ind.slice(0, 3).map(esc).join(' · ')}</div>
+  </a>`;
+
+/** 穴位行：穴名 / 定位 / 主治 */
+const ptRow = p => `
+  <div class="pt-row" id="pt-${p.code}">
+    <div class="pt-name">
+      <b>${esc(p.name)}</b>
+      <span class="pt-code">${p.code}</span>
+      ${p.special ? `<em class="pt-sp">${esc(p.special)}</em>` : ''}
+    </div>
+    <div class="pt-loc">${esc(p.loc)}</div>
+    <div class="pt-act">${esc(p.act)}</div>
+  </div>`;
+
+/** 穴位引用小标签，可跳转到所属经络并定位 */
+const ptLink = p => p.mer_no
+  ? `<a class="pill pt-link" href="#/a/m/${p.mer_no}?p=${p.code}" title="${esc(p.loc)}">${esc(p.name)}</a>`
+  : `<span class="pill">${esc(p.name)}</span>`;
+
+function viewAcuHome() {
+  const { meridians, acuStats } = S.boot;
+  $('#crumb').innerHTML = '<b>针灸</b> · 十四经 · 三百六十一穴';
+  document.title = '针灸 · 伤寒杂病论';
+  markActive('');
+
+  $('#reader').innerHTML = `
+    ${hero('针灸 · 十四经', '针灸', mi('经穴', acuStats.points) + mi('经脉', meridians.length) + mi('奇穴', '另附') + mi('专法', '醒脑开窍'))}
+    <p class="acu-lead">十二正经如环无端，气血自寅时起于肺经，周流脏腑，昼夜五十营；任督二脉一前一后，
+      总领阴阳。三百六十一穴分布其间，或为五输、或为原络、或为俞募，各有其性。
+      本篇按经脉流注次序编排，每经列循行、主治与全部腧穴，末附石学敏醒脑开窍针法与常见病配穴。</p>
+
+    <a class="xn-card" href="#/a/x">
+      <div class="xn-seal">醒</div>
+      <div class="xn-txt">
+        <div class="xn-kicker">石学敏 · 1972</div>
+        <h3>醒脑开窍针法</h3>
+        <p>以阴经与督脉穴为主，直取「神」之所在。主方Ⅰ／Ⅱ、手法量学、十五类并发症配穴、三则病案。</p>
+      </div>
+      <div class="xn-go">→</div>
+    </a>
+
+    <div class="acu-grid">${meridians.map(mcard).join('')}</div>
+
+    <a class="acu-more" href="#/a/c">
+      <b>临床应用</b>
+      <span>十四类常见病的配穴方案，与现代研究证据一览</span>
+      <i>→</i>
+    </a>`;
+}
+
+async function viewAcuMeridian(no, q) {
+  const d = await api('/api/acu/m/' + no);
+  const m = d.meridian;
+  const focus = q.get('p');
+  $('#crumb').innerHTML = `<b>针灸</b> · 第 ${cnNum(m.no)} 经 · ${esc(m.name)}`;
+  document.title = `${m.name} · 针灸`;
+  markActive('m' + no);
+
+  const tone = ACU_TONE[(m.no - 1) % 6];
+  $('#reader').innerHTML = `
+    ${hero(`针灸 · 十四经之${cnNum(m.no)}`, esc(m.name),
+      mi('经穴', m.count) + mi('属络', esc(m.organ)) + mi('代号', m.code), '', `var(--${tone})`)}
+    ${section('循　行', '经脉所过', `<p class="acu-text">${esc(m.flow)}</p>`)}
+    ${section('主　治', '本经所主', `<div class="pill-row">${m.ind.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`)}
+    ${section('取穴要点', '临证须知', `<p class="acu-text">${esc(m.note)}</p>`)}
+    ${section(`本经腧穴 · ${d.points.length}`, '穴名 · 定位 · 主治',
+      `<div class="pt-list">
+         <div class="pt-row pt-head"><div>穴名</div><div>定位</div><div>主治</div></div>
+         ${d.points.map(ptRow).join('')}
+       </div>`)}
+    ${pager(d.prev, d.next, '经')}`;
+
+  if (focus) {
+    const el = $('#pt-' + CSS.escape(focus));
+    if (el) {
+      el.classList.add('on');
+      const main = $('#main');
+      const prev = main.style.scrollBehavior;
+      main.style.scrollBehavior = 'auto';          // 直接定位，避免平滑滚动与渲染竞争
+      main.scrollTop += el.getBoundingClientRect().top - main.getBoundingClientRect().top - 140;
+      main.style.scrollBehavior = prev;
+    }
+  }
+}
+
+async function viewAcuXn() {
+  const { xn } = await api('/api/acu/xn');
+  $('#crumb').innerHTML = `<b>针灸</b> · 石学敏 · 醒脑开窍针法`;
+  document.title = '醒脑开窍针法 · 石学敏';
+  markActive('x');
+
+  const forms = xn.forms.map(f => `
+    <div class="xn-form">
+      <div class="xf-head">
+        <b>${esc(f.name)}</b>
+        <span>${esc(f.use)}</span>
+      </div>
+      <div class="pill-row">${f.pts.map(ptLink).join('')}</div>
+      <p class="xf-note">${esc(f.note)}</p>
+    </div>`).join('');
+
+  const steps = xn.steps.map((s, i) => `
+    <div class="xn-step">
+      <div class="xs-no">${i + 1}</div>
+      <div class="xs-body">
+        <div class="xs-head">
+          <b>${esc(s.pt)}</b>
+          <span class="pt-code">${s.code}</span>
+          <span class="xs-mer">${esc(s.mer)} · ${esc(s.side)}</span>
+        </div>
+        <div class="xs-line"><em>刺法</em>${esc(s.how)}</div>
+        <div class="xs-line"><em>手法</em>${esc(s.manip)}</div>
+        <div class="xs-line"><em>得气</em>${esc(s.react)}</div>
+      </div>
+    </div>`).join('');
+
+  const combos = xn.combos.map(c => `
+    <div class="xn-combo">
+      <div class="xc-name">${esc(c.name)}</div>
+      <div class="xc-pts">${c.refs.map(ptLink).join('')}</div>
+      <p class="xc-how">${esc(c.how)}</p>
+    </div>`).join('');
+
+  const dose = xn.dose.map(([n, a, f, t, u]) =>
+    `<tr><td>${esc(n)}</td><td>${esc(a)}</td><td>${esc(f)}</td><td>${esc(t)}</td><td>${esc(u)}</td></tr>`).join('');
+
+  const cases = xn.cases.map((c, i) => `
+    <div class="xn-case">
+      <div class="xcase-head"><span>案 ${i + 1}</span><b>${esc(c.title)}</b></div>
+      <p>${esc(c.text)}</p>
+    </div>`).join('');
+
+  $('#reader').innerHTML = `
+    ${hero('针灸 · 石氏针法', '醒脑开窍针法', mi('创立', '1972 年') + mi('创始人', '石学敏') + mi('主穴', '内关 · 水沟 · 三阴交'), '', 'var(--zhu)')}
+    <p class="acu-lead">${esc(xn.intro)}</p>
+
+    <div class="xn-quote">
+      <div class="xq-k">总病机</div>
+      <div class="xq-v">窍闭神匿，神不导气</div>
+      <p>${esc(xn.patho)}</p>
+      <div class="xq-law"><b>治法</b>${esc(xn.law)}</div>
+    </div>
+
+    ${section('组　方', '主方Ⅰ 与 主方Ⅱ', forms)}
+    ${section('操作规范', '六步 · 依次进针',
+      `<p class="acu-order">${esc(xn.order)}</p>${steps}`)}
+    ${section('手法量学', '角度 · 频率 · 时间 · 得气', `
+      <div class="table-wrap"><table class="acu-table">
+        <thead><tr><th>手法</th><th>幅度／方向</th><th>频率</th><th>时间</th><th>适用</th></tr></thead>
+        <tbody>${dose}</tbody>
+      </table></div>
+      <p class="acu-note">${esc(xn.aux_note)}</p>`)}
+    ${section('并发症配穴', `${xn.combos.length} 类`, `<div class="xn-combos">${combos}</div>`)}
+    ${section('疗　程', '', `<p class="acu-text">${esc(xn.course)}</p>`)}
+    ${section('病　案', '三则', cases + `<p class="acu-note">${esc(xn.cases_note)}</p>`)}
+    ${section('注意事项与禁忌', '', `<ul class="acu-cautions">${xn.cautions.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`)}`;
+}
+
+async function viewAcuClinic() {
+  const d = await api('/api/acu/clinic');
+  $('#crumb').innerHTML = '<b>针灸</b> · 临床应用';
+  document.title = '针灸临床应用 · 伤寒杂病论';
+  markActive('clinic');
+
+  const cats = [...new Set(d.clinic.map(c => c.cat))];
+  const blocks = cats.map(cat => `
+    <div class="pgroup">
+      <div class="pg-head"><i></i>${cat}</div>
+      <div class="clinic-grid">${d.clinic.filter(c => c.cat === cat).map(c => `
+        <div class="cz-card">
+          <div class="cz-name">${esc(c.name)}</div>
+          <div class="pill-row tight">${c.refs.map(ptLink).join('')}</div>
+          <div class="cz-add"><em>随症</em>${esc(c.add)}</div>
+          <div class="cz-note">${esc(c.note)}</div>
+        </div>`).join('')}</div>
+    </div>`).join('');
+
+  const evCls = { '强': 'ev-hi', '中': 'ev-mid', '—': 'ev-na' };
+  const modern = d.modern.map(m => `
+    <div class="md-item">
+      <div class="md-head">
+        <b>${esc(m.name)}</b>
+        <span class="ev ${evCls[m.ev] || 'ev-na'}">证据 ${esc(m.ev)}</span>
+      </div>
+      <p>${esc(m.text)}</p>
+    </div>`).join('');
+
+  $('#reader').innerHTML = `
+    ${hero('针灸 · 临床应用', '从配穴到证据', mi('病种', d.clinic.length) + mi('研究领域', d.modern.length), '', 'var(--qing)')}
+    <p class="acu-lead">配穴之法，一在辨经，二在辨病。下按病类分列主穴与随症加减，主穴皆取要穴，
+      随症则据寒热虚实增损。末列现代研究方向与证据强度，供临证取舍时参考。</p>
+    ${blocks}
+    ${section('现代应用', '机制与证据', `<div class="md-list">${modern}</div>`)}`;
+}
+
+function viewAcu(_id, q) {
+  const seg = (location.hash.slice(1) || '/').split('?')[0].split('/').filter(Boolean);
+  if (seg[1] === 'm') return viewAcuMeridian(+seg[2], q);
+  if (seg[1] === 'x') return viewAcuXn();
+  if (seg[1] === 'c') return viewAcuClinic();
+  return viewAcuHome();
+}
+
 /* ---------------- 搜索 ---------------- */
-const SEARCH_TIP = `<p class="search-empty">试试：桂枝汤 · 柴胡 · 弦脉 · 胃家实 · 但欲寐</p>
-  <p class="search-empty s-hint">方剂、中药、脉象、条文、讲稿一起搜</p>`;
+const SEARCH_TIP = `<p class="search-empty">试试：桂枝汤 · 柴胡 · 弦脉 · 内关 · 足三里 · 醒脑开窍</p>
+  <p class="search-empty s-hint">条文、方剂、中药、脉象、穴位、经络、讲稿一起搜</p>`;
 let searchTimer, searchItems = [], searchSel = -1;
 
 function openSearch() {
@@ -730,6 +970,7 @@ async function doSearch(q) {
 
   // 实体类结果（方剂 / 中药 / 脉象）排在条文之前，避免被几十条条文挤到屏幕外
   const groups = [
+    ['专题', d.topics, 2, t => item(`#/a/x`, '针法专题', `${hl(t.name)}<span class="s-sub">${esc(t.sub)}</span>`)],
     ['方剂', d.formulas, 6, f => item(`#/f/${f.id}`,
       `第${cnNum(f.chapter_no)}篇 · 方剂`,
       `${hl(f.name)}<span class="s-sub">${esc(f.func || '')}</span>`)],
@@ -739,6 +980,12 @@ async function doSearch(q) {
     ['脉象', d.pulses, 6, p => item(`#/p/${p.no}`,
       `${esc(p.group)} · ${p.py}`,
       `${hl(p.name)}脉<span class="s-sub">${esc((p.ill || []).join(' · '))}</span>`)],
+    ['穴位', d.points, 8, p => item(`#/a/m/${p.mer_no}?p=${p.code}`,
+      `${esc(p.mer)} · ${p.code}`,
+      `${hl(p.name)}<span class="s-sub">${esc(p.loc)}</span>`)],
+    ['经络', d.meridians, 4, m => item(`#/a/m/${m.no}`,
+      `${m.count} 穴 · 十四经`,
+      `${hl(m.name)}<span class="s-sub">${esc(m.ind.join(' · '))}</span>`)],
     ['条文', d.clauses, 5, c => item(`#/c/${c.chapter_no}?c=${c.no}`,
       `${esc(c.ctitle)} · 第 ${c.no} 条`,
       snip(c.origin + ' ' + (c.translation || '')))],
@@ -787,7 +1034,9 @@ function showSources() {
 function bindEvents() {
   $('#tabs').addEventListener('click', e => {
     const tab = e.target.closest('.tab');
-    if (tab) activatePane(tab.dataset.pane);
+    if (!tab) return;
+    activatePane(tab.dataset.pane);
+    if (tab.dataset.pane === 'acu' && S.route.view !== 'acu') go('/a');
   });
 
   $('#modeSeg').addEventListener('click', e => {

@@ -2,7 +2,7 @@
 """《伤寒杂病论》研读 · 本地桌面应用
 Flask + SQLite + 原生前端，单进程启动，窗口关闭即退出。
 """
-import os, sys, io, json, time, socket, sqlite3, threading, subprocess, webbrowser
+import os, sys, io, json, re, time, socket, sqlite3, threading, subprocess, webbrowser
 
 # ---------- 无控制台运行时修补 stdout ----------
 if sys.stdout is None:
@@ -14,6 +14,7 @@ from flask import Flask, g, jsonify, request, send_from_directory, abort
 from waitress.server import create_server
 
 import pulses as PUL          # 二十八脉静态知识库
+import acu as ACU             # 十四经、361 穴与醒脑开窍针法
 
 FROZEN = getattr(sys, 'frozen', False)
 BASE = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -70,8 +71,67 @@ def api_bootstrap():
     return jsonify(chapters=chapters, lectures=lectures, formulas=formulas, herbs=herbs,
                    sources=sources, stats=stats, categories=cats,
                    pulses=pulse_list, pulseGroups=PUL.GROUPS, pulseParts=PUL.PARTS,
+                   meridians=ACU.MERIDIANS, acuStats={'points': len(ACU.POINTS), 'meridians': len(ACU.MERIDIANS)},
                    book={'title': '伤寒杂病论', 'edition': '桂林古本 · 白云阁藏本系统',
                          'author': '汉 · 张仲景', 'lecturer': '郝万山'})
+
+
+# ---------------- 针灸 ----------------
+def pt_brief(p):
+    return dict(name=p[0], code=p[1], mer=p[2], loc=p[3], special=p[4], act=p[5])
+
+
+def combo_refs(text):
+    """把「风池、完骨、翳风」「丘墟透照海」这类配穴串拆成可点击的穴位引用。"""
+    out, seen = [], set()
+    for name in re.split(r'[、，,；;（）()\s]|透', text):
+        name = name.strip()
+        code = ACU.BY_NAME[name]['code'] if name in ACU.BY_NAME else ACU.ALIAS.get(name)
+        if code and code not in seen:
+            seen.add(code)
+            out.append(ACU.ref(code)[0])
+    return out
+
+
+def xn_payload():
+    """醒脑开窍：把穴位代码补上定位与归经，前端不再自行查表。"""
+    xn = dict(ACU.XN)
+    xn['forms'] = [dict(f, pts=ACU.ref(*f['points'])) for f in ACU.XN['forms']]
+    xn['steps'] = [dict(s, loc=ACU.PBY[s['code']]['loc'], special=ACU.PBY[s['code']]['special'])
+                   for s in ACU.XN['steps']]
+    xn['combos'] = [dict(c, refs=combo_refs(c['pts'])) for c in ACU.XN['combos']]
+    return xn
+
+
+@app.get('/api/acu')
+def api_acu():
+    return jsonify(meridians=ACU.MERIDIANS, stats={'points': len(ACU.POINTS)})
+
+
+@app.get('/api/acu/m/<int:no>')
+def api_acu_meridian(no):
+    m = ACU.MNO.get(no)
+    if not m:
+        abort(404)
+    pts = [pt_brief(p) for p in ACU.POINTS if p[2] == no]
+    prev = ACU.MNO.get(no - 1)
+    nxt = ACU.MNO.get(no + 1)
+    brief = lambda x: {'no': x['no'], 'name': x['name'], 'short': x['short']}
+    return jsonify(meridian=m, points=pts,
+                   prev=brief(prev) if prev else None,
+                   next=brief(nxt) if nxt else None)
+
+
+@app.get('/api/acu/xn')
+def api_acu_xn():
+    return jsonify(xn=xn_payload())
+
+
+@app.get('/api/acu/clinic')
+def api_acu_clinic():
+    clinic = [dict(c, refs=ACU.ref(*c['pts'])) for c in ACU.CLINIC]
+    return jsonify(clinic=clinic, modern=ACU.MODERN)
+
 
 @app.get('/api/chapter/<int:no>')
 def api_chapter(no):
@@ -176,11 +236,46 @@ def match_pulses(q):
         h.pop('hit')
     return hits[:12]
 
+def match_points(q):
+    """穴位检索：可按穴名、代码、定位、主治、特定穴属性反查。"""
+    ql = q.lower()
+    hits = []
+    for p in ACU.POINTS:
+        text = ' '.join([p[0], p[1], p[3], p[4], p[5]]).lower()
+        if ql in text:
+            hits.append({'name': p[0], 'code': p[1], 'mer_no': p[2],
+                         'mer': ACU.MNO[p[2]]['short'], 'loc': p[3], 'act': p[5],
+                         'exact': q == p[0] or ql == p[1].lower()})
+    hits.sort(key=lambda h: (not h['exact'], not h['name'].startswith(q)))
+    for h in hits:
+        h.pop('exact')
+    return hits[:15]
+
+
+def match_meridians(q):
+    hits = []
+    for m in ACU.MERIDIANS:
+        text = ' '.join([m['name'], m['short'], m['organ'], m['flow'], m['note'], *m['ind']])
+        if q in text:
+            hits.append({'no': m['no'], 'name': m['name'], 'short': m['short'],
+                         'count': m['count'], 'ind': m['ind'][:3]})
+    return hits[:6]
+
+
+def match_topics(q):
+    """针法专题：名称与关键词命中时给出入口。"""
+    keys = ['醒脑', '开窍', '石学敏', '中风', '针刺手法', '手法量学', '针灸']
+    if any(k in q for k in keys):
+        return [{'key': 'x', 'name': '石学敏醒脑开窍针法', 'sub': '主方Ⅰ/Ⅱ · 手法量学 · 十五类配穴 · 病案'}]
+    return []
+
+
 @app.get('/api/search')
 def api_search():
     q = (request.args.get('q') or '').strip()
     if not q:
-        return jsonify(q=q, clauses=[], passages=[], formulas=[], herbs=[], pulses=[])
+        return jsonify(q=q, clauses=[], passages=[], formulas=[], herbs=[], pulses=[],
+                       points=[], meridians=[], topics=[])
 
     like, cl, ps = '%' + q + '%', [], []
 
@@ -218,7 +313,9 @@ def api_search():
                     OR meridian LIKE ? OR effect LIKE ? OR indication LIKE ? OR modern LIKE ?
                  ORDER BY (name LIKE ?) DESC, formula_count DESC LIMIT 20''',
               (like, like, like, like, like, like, like, like, like))
-    return jsonify(q=q, clauses=cl, passages=ps, formulas=fs, herbs=hs, pulses=match_pulses(q))
+    return jsonify(q=q, clauses=cl, passages=ps, formulas=fs, herbs=hs,
+                   pulses=match_pulses(q), points=match_points(q),
+                   meridians=match_meridians(q), topics=match_topics(q))
 
 @app.get('/api/ping')
 def api_ping():
