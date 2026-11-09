@@ -58,7 +58,12 @@
 
   <main class="main" id="main">
     <div class="topbar">
-      <div class="crumb" id="crumb">全书目录</div>
+      <div class="nav-left">
+        <button class="iconbtn backbtn" id="backBtn" title="返回上一页（Alt + ←）" disabled aria-label="返回上一页">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="crumb" id="crumb">全书目录</div>
+      </div>
       <div class="tools">
         <div class="seg" id="modeSeg" title="阅读层级">
           <button data-mode="origin">原文</button>

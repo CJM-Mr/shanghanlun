@@ -342,7 +342,43 @@ function markActive(key) {
 const VIEWS = { c: 'chapter', l: 'lecture', f: 'formula', h: 'herb', p: 'pulse' };
 const RENDER = { chapter: viewChapter, lecture: viewLecture, formula: viewFormula, herb: viewHerb, pulse: viewPulse };
 
+/* 站内访问栈：末位为当前页，用于「返回上一页」 */
+const NAV = [];
+const SCROLL = new Map();   // 各页离开时的阅读位置
+let goingBack = false;
+let lastHash = '';
+
+const hashNow = () => location.hash || '#/';
+
+function syncBack() {
+  const btn = $('#backBtn');
+  if (btn) btn.disabled = NAV.length <= 1;
+}
+
+function goBack() {
+  if (NAV.length <= 1) return;
+  goingBack = true;
+  setTimeout(() => { goingBack = false; }, 400);   // 兜底：后退未触发 hashchange 时不误弹栈
+  history.back();
+}
+
 function route() {
+  const hash = hashNow();
+  const top = NAV[NAV.length - 1];
+  let back = false;
+
+  if (goingBack) {                 // 后退：把刚离开的那页弹出
+    goingBack = false;
+    if (hash !== top) { NAV.pop(); back = true; }
+  } else if (hash !== top) {       // 前进：入栈
+    NAV.push(hash);
+    if (NAV.length > 60) NAV.shift();
+  }
+  syncBack();
+
+  if (lastHash && lastHash !== hash) SCROLL.set(lastHash, $('#main').scrollTop);
+  lastHash = hash;
+
   const [path, qs] = (location.hash.slice(1) || '/').split('?');
   const q = new URLSearchParams(qs || '');
 
@@ -359,7 +395,8 @@ function route() {
   $('#main').scrollTop = 0;
 
   const render = RENDER[S.route.view];
-  render ? render(+id, q) : renderWelcome();
+  const done = render ? render(+id, q) : renderWelcome();
+  if (back) Promise.resolve(done).then(() => { $('#main').scrollTop = SCROLL.get(hash) || 0; });
 }
 
 const go = hash => { location.hash = hash; };
@@ -784,6 +821,9 @@ function bindEvents() {
     if (link) { e.preventDefault(); go(link.getAttribute('href').slice(1)); }
   });
 
+  $('#backBtn').addEventListener('click', goBack);
+  window.addEventListener('auxclick', e => { if (e.button === 3) { e.preventDefault(); goBack(); } });
+
   $('#searchTrigger').onclick = openSearch;
   $('#searchClose').onclick = closeSearch;
   $('#overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeSearch(); });
@@ -822,6 +862,7 @@ function bindEvents() {
       return go(it.dataset.go.slice(1));
     }
     if (inInput) return;
+    if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); return goBack(); }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       const link = e.key === 'ArrowLeft' ? $('.pager a:not(.r)') : $('.pager a.r');
       if (link) { e.preventDefault(); go(link.getAttribute('href').slice(1)); }

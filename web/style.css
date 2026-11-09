@@ -218,10 +218,16 @@ kbd {
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line-2);
 }
+.nav-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .crumb {
   font-family: var(--sans); font-size: 12px; color: var(--ink-3);
   letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
 }
+.backbtn { flex: none; }
+.backbtn:disabled { opacity: .32; cursor: default; }
+.backbtn:disabled:hover { border-color: var(--line); color: var(--ink-2); }
+.backbtn:not(:disabled) { color: var(--zhu); border-color: var(--zhu-soft); }
 .crumb b { color: var(--ink-2); font-weight: 600; }
 .tools { display: flex; align-items: center; gap: 8px; flex: none; }
 .seg {
