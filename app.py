@@ -133,6 +133,14 @@ def api_acu_clinic():
     return jsonify(clinic=clinic, modern=ACU.MODERN)
 
 
+@app.get('/api/clauses')
+def api_clauses():
+    """全书条文索引：只取条号与原文首段，供「条文总览」页使用。"""
+    return jsonify(rows('''SELECT no, chapter_no, substr(origin, 1, 54) origin,
+                                  length(origin) len
+                           FROM clauses ORDER BY chapter_no, no'''))
+
+
 @app.get('/api/chapter/<int:no>')
 def api_chapter(no):
     ch = row('SELECT * FROM chapters WHERE no=?', (no,))

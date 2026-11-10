@@ -426,15 +426,15 @@ function route() {
 const go = hash => { location.hash = hash; };
 
 /* ---------------- 首页 ---------------- */
-/** 首页数据卡：[左侧目录面板, 标签, 数值] —— 点击即切到对应目录 */
+/** 首页数据卡：[左侧目录面板, 标签, 数值, 落地页] */
 const statCards = () => {
   const { stats, pulses, lectures } = S.boot;
   return [
-    ['chapters', '条文', stats.c],
-    ['formulas', '方剂', stats.f],
-    ['herbs', '中药', stats.h],
-    ['pulses', '脉象', pulses.length],
-    ['lectures', '讲次', lectures.length],
+    ['chapters', '条文', stats.c, '#/c'],
+    ['formulas', '方剂', stats.f, '#/f'],
+    ['herbs', '中药', stats.h, '#/h'],
+    ['pulses', '脉象', pulses.length, '#/p'],
+    ['lectures', '讲次', lectures.length, '#/l'],
   ];
 };
 
@@ -447,8 +447,8 @@ function renderWelcome() {
       <h2>伤寒杂病论</h2>
       <p class="welcome-sub">桂林古本三十四篇 · 逐条拆解 · 郝万山七十讲</p>
       <div class="welcome-grid">
-        ${statCards().map(([pane, label, n]) => `
-          <button class="stat" type="button" data-pane="${pane}" title="打开${label}目录">
+        ${statCards().map(([pane, label, n, hash]) => `
+          <button class="stat" type="button" data-pane="${pane}" data-go="${hash}" title="查看${label}总览">
             <b>${n}</b><span>${label}</span>
           </button>`).join('')}
       </div>
@@ -456,8 +456,94 @@ function renderWelcome() {
     </div>`;
 }
 
+/* ---------------- 总览页（数据卡落地） ---------------- */
+/** 条文总览：按篇分组，逐条列出原文首句 */
+async function renderClauseIndex() {
+  const { chapters } = S.boot;
+  const list = await api('/api/clauses');
+  $('#crumb').innerHTML = '<b>全书条文</b> · 按篇排列';
+  document.title = '条文总览 · 伤寒杂病论';
+  markActive('');
+
+  const secs = chapters.map(c => {
+    const items = list.filter(x => x.chapter_no === c.no);
+    return items.length ? `
+      <section class="ov-sec" id="ov-c${c.no}">
+        <a class="ov-head" href="#/c/${c.no}">
+          <span class="ov-no">${String(c.no).padStart(2, '0')}</span>
+          <b>${esc(c.title)}</b>
+          <small>${items.length} 条</small>
+        </a>
+        <div class="ov-list">${items.map(cl => `
+          <a class="ov-row" href="#/c/${c.no}?c=${cl.no}">
+            <span class="ov-row-no">${cl.no}</span>
+            <span class="ov-row-tx">${esc(cl.origin)}${cl.len > 54 ? '…' : ''}</span>
+          </a>`).join('')}</div>
+      </section>` : '';
+  }).join('');
+
+  $('#reader').innerHTML = `
+    ${hero('全书条文', '条文总览', mi('条文', list.length) + mi('篇目', chapters.length))}
+    <div class="ov-nav">${chapters.map(c => `<button class="ov-chip" data-jump="ov-c${c.no}">${esc(c.title)}</button>`).join('')}</div>
+    ${secs}`;
+}
+
+/** 方剂总览：按篇序排列的方名卡片 */
+function renderFormulaIndex() {
+  const { formulas } = S.boot;
+  $('#crumb').innerHTML = '<b>方剂</b> · 全书索引';
+  document.title = '方剂总览 · 伤寒杂病论';
+  markActive('');
+  $('#reader').innerHTML = `
+    ${hero('方剂', '方剂总览', mi('方剂', formulas.length) + mi('篇目', new Set(formulas.map(f => f.chapter_no)).size))}
+    <p class="ov-lead">按篇序排列。点方名入详情：组成、煎服、出处条文与郝万山讲解。</p>
+    <div class="ov-grid">${formulas.map(f => `
+      <a class="ov-card" href="#/f/${f.id}">
+        <b>${esc(f.name)}</b>
+        <span class="ov-sub">${esc((f.func || '').slice(0, 16))}</span>
+        <span class="ov-tag">第${cnNum(f.chapter_no)}篇</span>
+      </a>`).join('')}</div>`;
+}
+
+/** 中药总览：按类别分组 */
+function renderHerbIndex() {
+  const { herbs } = S.boot;
+  $('#crumb').innerHTML = '<b>中药</b> · 全书索引';
+  document.title = '中药总览 · 伤寒杂病论';
+  markActive('');
+
+  const groups = new Map();
+  for (const h of herbs) groups.set(h.category, [...(groups.get(h.category) || []), h]);
+
+  $('#reader').innerHTML = `
+    ${hero('中药', '中药总览', mi('药材', herbs.length) + mi('类别', groups.size))}
+    ${[...groups].map(([cat, hs]) => section(esc(cat), `${hs.length} 味`, `<div class="ov-grid">${hs.map(h => `
+      <a class="ov-card" href="#/h/${h.id}">
+        <b>${esc(h.name)}</b>
+        <span class="ov-sub">${esc(h.nature || '')}</span>
+        <span class="ov-tag">${h.formula_count} 方</span>
+      </a>`).join('')}</div>`)).join('')}`;
+}
+
+/** 讲稿总览：七十讲一览 */
+function renderLectureIndex() {
+  const { lectures, stats } = S.boot;
+  $('#crumb').innerHTML = '<b>讲稿</b> · 郝万山七十讲';
+  document.title = '讲稿总览 · 伤寒杂病论';
+  markActive('');
+  $('#reader').innerHTML = `
+    ${hero('郝万山 · 讲稿', '讲稿总览', mi('讲次', lectures.length) + mi('分段', stats.p))}
+    <div class="ov-list">${lectures.map(l => `
+      <a class="ov-row" href="#/l/${l.no}">
+        <span class="ov-row-no">${String(l.no).padStart(2, '0')}</span>
+        <span class="ov-row-tx">${esc(l.title)}${l.category ? `<em>${esc(l.category)}</em>` : ''}</span>
+        <span class="ov-row-meta">${l.passage_count} 段</span>
+      </a>`).join('')}</div>`;
+}
+
 /* ---------------- 篇章页 ---------------- */
 async function viewChapter(no, q) {
+  if (!no) return renderClauseIndex();
   const d = await api('/api/chapter/' + no);
   const ch = d.chapter;
   $('#crumb').innerHTML = `<b>${esc(ch.category)}</b> · 第 ${cnNum(ch.no)} 篇 · ${esc(ch.title)}`;
@@ -534,6 +620,7 @@ function haoSection(passages) {
 
 /* ---------------- 讲次页 ---------------- */
 async function viewLecture(no) {
+  if (!no) return renderLectureIndex();
   const d = await api('/api/lecture/' + no);
   const L = d.lecture;
   $('#crumb').innerHTML = `<b>郝万山</b> · 第 ${L.no} 讲`;
@@ -555,6 +642,7 @@ async function viewLecture(no) {
 
 /* ---------------- 方剂页 ---------------- */
 async function viewFormula(id) {
+  if (!id) return renderFormulaIndex();
   const d = await api('/api/formula/' + id);
   const f = d.formula;
   $('#crumb').innerHTML = `<b>方剂</b> · ${esc(f.name)}`;
@@ -592,6 +680,7 @@ async function viewFormula(id) {
 
 /* ---------------- 中药页 ---------------- */
 async function viewHerb(id) {
+  if (!id) return renderHerbIndex();
   const d = await api('/api/herb/' + id);
   const h = d.herb;
   $('#crumb').innerHTML = `<b>中药</b> · ${esc(h.category)} · ${esc(h.name)}`;
@@ -1041,12 +1130,19 @@ function showSources() {
 }
 
 /* ---------------- 交互 ---------------- */
+/* 顶部标签 → 对应总览页；只在首页/总览页之间跳，阅读正文时仅切左侧目录，免得丢掉阅读位置 */
+const TAB_HASH = { chapters: '#/', lectures: '#/l', formulas: '#/f', herbs: '#/h', pulses: '#/p' };
+const atIndex = () => ['', '/', '/c', '/f', '/h', '/l', '/p', '/a'].includes(location.hash.replace(/^#/, ''));
+
 function bindEvents() {
   $('#tabs').addEventListener('click', e => {
     const tab = e.target.closest('.tab');
     if (!tab) return;
-    activatePane(tab.dataset.pane);
-    if (tab.dataset.pane === 'acu' && S.route.view !== 'acu') go('/a');
+    const pane = tab.dataset.pane;
+    activatePane(pane);
+    const hash = TAB_HASH[pane];
+    if (pane === 'acu' && S.route.view !== 'acu') go('/a');
+    else if (hash && atIndex() && hashNow() !== hash) go(hash);
   });
 
   $('#modeSeg').addEventListener('click', e => {
@@ -1063,7 +1159,18 @@ function bindEvents() {
     const t = e.target;
 
     const stat = t.closest('.stat[data-pane]');
-    if (stat) { activatePane(stat.dataset.pane); $('#pane-' + stat.dataset.pane).scrollTop = 0; return; }
+    if (stat) {                       // 首页数据卡：切左侧目录 + 主区跳到总览页
+      activatePane(stat.dataset.pane);
+      $('#pane-' + stat.dataset.pane).scrollTop = 0;
+      go(stat.dataset.go);
+      return;
+    }
+
+    const jump = t.closest('[data-jump]');
+    if (jump) {
+      document.getElementById(jump.dataset.jump)?.scrollIntoView({ block: 'start' });
+      return;
+    }
 
     if (t.closest('[data-toggle]')) return t.closest('.formula').classList.toggle('open');
 
