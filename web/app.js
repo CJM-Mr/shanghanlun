@@ -426,8 +426,19 @@ function route() {
 const go = hash => { location.hash = hash; };
 
 /* ---------------- 首页 ---------------- */
+/** 首页数据卡：[左侧目录面板, 标签, 数值] —— 点击即切到对应目录 */
+const statCards = () => {
+  const { stats, pulses, lectures } = S.boot;
+  return [
+    ['chapters', '条文', stats.c],
+    ['formulas', '方剂', stats.f],
+    ['herbs', '中药', stats.h],
+    ['pulses', '脉象', pulses.length],
+    ['lectures', '讲次', lectures.length],
+  ];
+};
+
 function renderWelcome() {
-  const { stats } = S.boot;
   $('#crumb').textContent = '全书目录';
   markActive('');
   $('#reader').innerHTML = `
@@ -436,13 +447,12 @@ function renderWelcome() {
       <h2>伤寒杂病论</h2>
       <p class="welcome-sub">桂林古本三十四篇 · 逐条拆解 · 郝万山七十讲</p>
       <div class="welcome-grid">
-        <div class="stat"><b>${stats.c}</b><span>条文</span></div>
-        <div class="stat"><b>${stats.f}</b><span>方剂</span></div>
-        <div class="stat"><b>${stats.h}</b><span>中药</span></div>
-        <div class="stat"><b>${S.boot.pulses.length}</b><span>脉象</span></div>
-        <div class="stat"><b>70</b><span>讲次</span></div>
+        ${statCards().map(([pane, label, n]) => `
+          <button class="stat" type="button" data-pane="${pane}" title="打开${label}目录">
+            <b>${n}</b><span>${label}</span>
+          </button>`).join('')}
       </div>
-      <p class="welcome-hint">原文 ${(stats.chars / 10000).toFixed(1)} 万字　·　按 <kbd>/</kbd> 全书检索　·　<kbd>←</kbd> <kbd>→</kbd> 翻篇</p>
+      <p class="welcome-hint">原文 ${(S.boot.stats.chars / 10000).toFixed(1)} 万字　·　按 <kbd>/</kbd> 全书检索　·　<kbd>←</kbd> <kbd>→</kbd> 翻篇</p>
     </div>`;
 }
 
@@ -1051,6 +1061,10 @@ function bindEvents() {
 
   $('#reader').addEventListener('click', e => {
     const t = e.target;
+
+    const stat = t.closest('.stat[data-pane]');
+    if (stat) { activatePane(stat.dataset.pane); $('#pane-' + stat.dataset.pane).scrollTop = 0; return; }
+
     if (t.closest('[data-toggle]')) return t.closest('.formula').classList.toggle('open');
 
     const acc = t.closest('[data-acc]');

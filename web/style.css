@@ -494,10 +494,20 @@ body[data-mode="both"] .note { display: none; }
   letter-spacing: .12em; color: var(--ink-3);
 }
 .welcome-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 40px; }
+/* 数据卡：点击即切到左侧对应目录 */
 .stat {
-  padding: 18px 10px; border: 1px solid var(--line); border-radius: 11px;
-  background: var(--paper-2);
+  display: block; width: 100%; padding: 18px 10px;
+  border: 1px solid var(--line); border-radius: 11px;
+  background: var(--paper-2); color: inherit; font: inherit;
+  text-align: center; cursor: pointer;
+  transition: border-color .16s, background .16s, box-shadow .16s, transform .16s;
 }
+.stat:hover {
+  border-color: var(--zhu-soft); background: var(--paper-3);
+  box-shadow: 0 6px 18px rgba(72, 55, 28, .10); transform: translateY(-2px);
+}
+.stat:active { transform: translateY(0); box-shadow: none; }
+.stat:focus-visible { outline: 2px solid var(--zhu-soft); outline-offset: 2px; }
 .stat b {
   display: block; font-size: 1.6rem; font-weight: 600; color: var(--zhu);
   font-variant-numeric: tabular-nums; letter-spacing: .02em;
